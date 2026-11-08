@@ -75,6 +75,10 @@ export class WakeupService {
   private generation(bucket: string): number { return this.generations.get(bucket) ?? 0; }
 
   private async onEvent(event: PublicThreadEvent): Promise<void> {
+    // A stopped service must be inert even if the host keeps delivering events to a stale listener.
+    if (!this.subscription) return;
+    // A stopped service must be inert even if the host keeps delivering events to a stale listener.
+    if (!this.subscription) return;
     if (event.kind !== 'run.completed' && event.kind !== 'run.failed') return;
     const epoch = this.epoch;
     const status: Status = event.kind === 'run.completed' ? 'done' : 'error';
