@@ -241,3 +241,91 @@ describe('WakeupService QA: stop() inertness', () => {
     expect((t.api.threads.subscribe as ReturnType<typeof vi.fn>)).toHaveBeenCalledTimes(1);
   });
 });
+
+describe('WakeupService QA: Project state re-check at flush (fix 71cdfb8)', () => {
+  const proj = { threads: { w: { title: 'Secret', projectId: 'p1' } } };
+  const ids = (t: ReturnType<typeof setup>) => t.dispatch.mock.calls.map(c => c[0].id);
+
+  it('a Project already disabled when the flush starts gets no dispatch at all', async () => {
+    const t = setup({ ...proj, orchestrators: [portfolio, p1(true)] });
+    t.emit('run.completed', 'w'); await t.settle();
+    t.state.orchestrators = [portfolio, p1(false)];
+    await t.fire();
+    expect(t.dispatch).not.toHaveBeenCalled();
+  });
+
+  it('a Project missing from the list at flush start is still dispatched to (core may create it lazily)', async () => {
+    const t = setup({ ...proj });
+    t.emit('run.completed', 'w'); await t.settle(); await t.fire();
+    expect(ids(t)).toEqual(['project:p1']);
+  });
+
+  it('a Project deleted during the debounce (ORCHESTRATOR_NOT_FOUND, gone from list) leaks no summary-only ping', async () => {
+    const t = setup({ ...proj, orchestrators: [portfolio, p1(true)], dispatch: async () => { throw err('ORCHESTRATOR_NOT_FOUND'); } });
+    t.emit('run.completed', 'w'); await t.settle();
+    t.state.orchestrators = [portfolio];
+    await t.fire();
+    expect(ids(t)).toEqual(['project:p1']);
+  });
+
+  it('race: enabled at the first read, disabled at the second read after a generic dispatch failure -> dropped', async () => {
+    const t = setup({ ...proj, orchestrators: [portfolio, p1(true)], dispatch: async () => { throw new Error('creation failed'); } });
+    t.emit('run.completed', 'w'); await t.settle();
+    let calls = 0;
+    t.list.mockImplementation(async () => (++calls <= 1 ? [portfolio, p1(true)] : [portfolio, p1(false)]));
+    await t.fire();
+    expect(ids(t)).toEqual(['project:p1']);
+  });
+
+  it('list() failing at the post-failure re-read sends no summary-only ping and does not throw', async () => {
+    const t = setup({ ...proj, orchestrators: [portfolio, p1(true)], dispatch: async () => { throw new Error('unreachable'); } });
+    t.emit('run.completed', 'w'); await t.settle();
+    let calls = 0;
+    t.list.mockImplementation(async () => { if (++calls >= 2) throw new Error('list down'); return [portfolio, p1(true)]; });
+    await t.fire();
+    expect(ids(t)).toEqual(['project:p1']);
+  });
+
+  it('list() failing at flush start does not block the Project dispatch', async () => {
+    const t = setup({ ...proj, orchestrators: [portfolio, p1(true)] });
+    t.emit('run.completed', 'w'); await t.settle();
+    t.list.mockRejectedValue(new Error('list down'));
+    await t.fire();
+    expect(ids(t)).toEqual(['project:p1']);
+  });
+
+  it('stop() while the flush-start list() read is pending dispatches nothing', async () => {
+    const t = setup({ ...proj, orchestrators: [portfolio, p1(true)] });
+    t.emit('run.completed', 'w'); await t.settle();
+    let release!: () => void;
+    t.list.mockImplementation(() => new Promise(r => { release = () => r([portfolio, p1(true)]); }));
+    await t.fire();
+    t.service.stop();
+    release(); await t.settle();
+    expect(t.dispatch).not.toHaveBeenCalled();
+  });
+
+  it('invalidateBucket() while the flush-start list() read is pending dispatches nothing', async () => {
+    const t = setup({ ...proj, orchestrators: [portfolio, p1(true)] });
+    t.emit('run.completed', 'w'); await t.settle();
+    let release!: () => void;
+    t.list.mockImplementation(() => new Promise(r => { release = () => r([portfolio, p1(true)]); }));
+    await t.fire();
+    t.service.invalidateBucket('project:p1');
+    release(); await t.settle();
+    expect(t.dispatch).not.toHaveBeenCalled();
+  });
+
+  it('PARITY PROBE: a Project with no orchestrator thread yet whose lazy creation fails still gets the summary-only portfolio ping (core: ensureProjectOrchestratorThread throws -> summaryOnly)', async () => {
+    const t = setup({ ...proj, dispatch: async target => { if (target.id === 'project:p1') throw new Error('creation failed'); return { runId: 'r' }; } });
+    t.emit('run.failed', 'w'); await t.settle(); await t.fire();
+    expect(ids(t)).toEqual(['project:p1', 'portfolio']);
+    expect(JSON.stringify(t.dispatch.mock.calls[1])).not.toContain('Secret');
+  });
+
+  it('summary-only never contains Project thread details even when sent after the re-check', async () => {
+    const t = setup({ ...proj, orchestrators: [portfolio, p1(true)], dispatch: async target => { if (target.id === 'project:p1') throw new Error('x'); return { runId: 'r' }; } });
+    t.emit('run.failed', 'w'); await t.settle(); await t.fire();
+    expect(t.dispatch.mock.calls[1][1].prompt).toBe('New activity in Project p1 — the Project orchestrator could not be reached.');
+  });
+});
