@@ -20,6 +20,7 @@ Coordinate documents and Claude agents through a voice-first interface. Threads 
 - **Orchestrator wake-ups** — when a thread finishes or fails, this plugin pings the Portfolio/Project orchestrator (batched, 12 s debounce). Requires an Agent Threads version with wake-up delegation (capability `orchestrators.wakeup.delegate`); on older versions Agent Threads keeps doing this itself. Toggle in Settings → Orchestrators → *Handle orchestrator wake-ups in this plugin* (default on); turning it off hands wake-ups back to Agent Threads. Known limits:
   - Wake-ups are sent with queueIfBusy, so a busy orchestrator queues them. If Agent Threads still reports THREAD_BUSY, the batch is retried when the orchestrator next completes a run, at most 3 times, then dropped (the 60-minute heartbeat is the backstop).
   - A batch still waiting out its 12 s debounce is discarded when the plugin unloads or the toggle is turned off; the heartbeat covers it.
+  - A Project that was deleted (or is otherwise absent from the orchestrator list) after a failed dispatch gets one summary-only portfolio ping naming only the Project id (parity with Agent Threads, no thread details).
   - A failed delegation claim is retried only when the Agent Threads API changes (restart/reload) or the setting is toggled.
 - **Rich sidebar transcript** — see what was said, what tools ran, and what files were touched
 - **Hotkey support** — bind a key to toggle the voice connection without touching the panel

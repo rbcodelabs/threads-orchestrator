@@ -68,9 +68,13 @@ export class WakeupLifecycle {
   dispose(): void {
     if (this.disposed) return;
     this.disposed = true;
-    this.unsubscribe?.();
-    this.unsubscribe = null;
-    this.release();
+    // The delegate must be handed back even if the client's unsubscribe throws.
+    try {
+      this.unsubscribe?.();
+    } finally {
+      this.unsubscribe = null;
+      this.release();
+    }
   }
 
   private release(): void {
