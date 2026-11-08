@@ -36,6 +36,8 @@ export interface VoiceSettings {
   wakeWordThreshold: number;
   /** Voice templates from enrollment (top-3 averaged embedding vectors, each 96 floats). */
   enrollmentEmbeddings: number[][] | null;
+  /** Own orchestrator wake-ups (via Agent Threads delegation) instead of letting core ping them. */
+  wakeOrchestratorsOnActivity: boolean;
   legacyVoiceMigration?: 1;
 }
 
@@ -51,6 +53,7 @@ export const DEFAULT_SETTINGS: Omit<VoiceSettings, 'openaiApiKey'> = {
   voiceDisconnectGraceSecs: 3,
   wakeWordThreshold: 0.75,
   enrollmentEmbeddings: null,
+  wakeOrchestratorsOnActivity: true,
 };
 
 function maskOpenAiKey(key: string | null | undefined): string {
@@ -391,6 +394,21 @@ export class ThreadsOrchestratorSettingTab extends PluginSettingTab {
         text.inputEl.min = '1';
         text.inputEl.max = '30';
         text.inputEl.style.width = '5em';
+      });
+
+    containerEl.createEl('h2', { text: 'Orchestrators' });
+
+    new Setting(containerEl)
+      .setName('Handle orchestrator wake-ups in this plugin')
+      .setDesc('When a thread finishes or fails, this plugin pings the Portfolio or Project orchestrator to review it. Turning this off hands wake-ups back to Agent Threads. Requires an Agent Threads version that supports wake-up delegation; otherwise Agent Threads keeps handling wake-ups itself.')
+      .addToggle(toggle => {
+        toggle
+          .setValue(this.plugin.settings.wakeOrchestratorsOnActivity)
+          .onChange(async (value) => {
+            this.plugin.settings.wakeOrchestratorsOnActivity = value;
+            await this.plugin.saveSettings();
+            this.plugin.applyWakeupSetting();
+          });
       });
 
     containerEl.createEl('h2', { text: 'Developer' });

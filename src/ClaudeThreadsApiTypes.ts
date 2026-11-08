@@ -1,4 +1,4 @@
-export type PublicErrorCode = 'PLUGIN_UNAVAILABLE' | 'THREAD_NOT_FOUND' | 'RUN_NOT_FOUND' | 'RUN_FAILED' | 'RUN_INTERRUPTED' | 'ORCHESTRATOR_NOT_FOUND' | 'INVALID_ARGUMENT';
+export type PublicErrorCode = 'PLUGIN_UNAVAILABLE' | 'THREAD_NOT_FOUND' | 'RUN_NOT_FOUND' | 'RUN_FAILED' | 'RUN_INTERRUPTED' | 'ORCHESTRATOR_NOT_FOUND' | 'THREAD_BUSY' | 'INVALID_ARGUMENT' | 'IDEMPOTENCY_CONFLICT' | 'TRACE_NOT_FOUND' | 'CURSOR_INVALID' | 'CONSTRAINT_UNSUPPORTED';
 export type ThreadStatus = 'waiting' | 'active' | 'error' | 'archived' | 'reconnecting';
 export interface PublicError { readonly code: PublicErrorCode; readonly message: string }
 export interface MessageSnapshot { readonly id: string; readonly role: 'user' | 'assistant' | 'compact' | 'notice'; readonly content: string; readonly timestamp: number }
@@ -19,7 +19,11 @@ export type PublicThreadEvent =
   | { readonly kind: 'run.failed'; readonly threadId: string; readonly runId: string; readonly error: PublicError; readonly at: number }
   | { readonly kind: 'thread.removed'; readonly threadId: string; readonly at: number };
 export interface Disposable { dispose(): void }
-export interface OrchestratorSnapshot { readonly id: string; readonly kind: 'portfolio' | 'project'; readonly threadId: string; readonly title: string; readonly projectId?: string }
+/** threadId is '' for a DISABLED Project that has no orchestrator thread (core lists it with enabled:false); enabled Projects without a thread are absent. */
+export interface OrchestratorSnapshot { readonly id: string; readonly kind: 'portfolio' | 'project'; readonly threadId: string; readonly title: string; readonly projectId?: string; /** Absent on older cores; treat undefined as true. */ readonly enabled?: boolean }
+export interface DispatchInput extends SendInput { /** Queue the prompt if the orchestrator is busy instead of throwing THREAD_BUSY. */ readonly queueIfBusy?: boolean }
+export const WAKEUP_DELEGATE_CAPABILITY = 'orchestrators.wakeup.delegate';
+export interface WakeupDelegateOwner { readonly pluginId: string }
 export interface AgentToolDefinition { readonly type: 'function'; readonly name: string; readonly description: string; readonly parameters: Readonly<Record<string, unknown>> }
 export interface AgentToolBundle { readonly tools: readonly AgentToolDefinition[]; execute(name: string, args: Record<string, unknown>): Promise<string> }
 export interface ClaudeThreadsApiV1 {
@@ -31,6 +35,10 @@ export interface ClaudeThreadsApiV1 {
     create(input: CreateThreadInput): Promise<{ readonly threadId: string }>; send(threadId: string, input: SendInput): Promise<{ readonly runId: string }>;
     wait(runId: string, options?: WaitOptions): Promise<RunResult>; open(threadId: string): Promise<void>; subscribe(listener: (event: PublicThreadEvent) => void): Disposable;
   };
-  readonly orchestrators: { list(): Promise<readonly OrchestratorSnapshot[]>; dispatch(target: { readonly id: string }, input: SendInput): Promise<{ readonly runId: string }> };
+  readonly orchestrators: {
+    list(): Promise<readonly OrchestratorSnapshot[]>; dispatch(target: { readonly id: string }, input: DispatchInput): Promise<{ readonly runId: string }>;
+    /** Optional (capability 'orchestrators.wakeup.delegate'): claim ownership of orchestrator wake-ups from core. Dispose to hand them back. */
+    delegateWakeup?(owner: WakeupDelegateOwner): Disposable;
+  };
   readonly agentTools: { createBundle(profile: 'voice-orchestration'): AgentToolBundle };
 }
