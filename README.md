@@ -17,7 +17,10 @@ Coordinate documents and Claude agents through a voice-first interface. Threads 
   - Open any note in a new tab
   - List outgoing links
 - **Claude Threads API v1 integration** — create, inspect, message, wait for, and open threads through Claude Threads' published API; discover and dispatch to Portfolio/Project orchestrators; receive semantic completion notifications
-- **Orchestrator wake-ups** — when a thread finishes or fails, pings the Portfolio/Project orchestrator (batched, 12 s debounce). Requires an Agent Threads version with wake-up delegation (capability `orchestrators.wakeup.delegate`); on older versions Agent Threads keeps doing this itself. Toggle in Settings → Orchestrators → *Wake orchestrators on thread activity* (default on).
+- **Orchestrator wake-ups** — when a thread finishes or fails, this plugin pings the Portfolio/Project orchestrator (batched, 12 s debounce). Requires an Agent Threads version with wake-up delegation (capability `orchestrators.wakeup.delegate`); on older versions Agent Threads keeps doing this itself. Toggle in Settings → Orchestrators → *Handle orchestrator wake-ups in this plugin* (default on); turning it off hands wake-ups back to Agent Threads. Known limits:
+  - If the orchestrator is busy, the batch is retried when it next completes a run, at most 3 times, then dropped (the 60-minute heartbeat is the backstop).
+  - A failed delegation claim is retried only when the Agent Threads API changes (restart/reload) or the setting is toggled.
+  - If a Project orchestrator fails to be created (or is absent from the orchestrator list after a failed dispatch), the plugin sends no summary-only portfolio ping; the 60-minute heartbeat is the backstop.
 - **Rich sidebar transcript** — see what was said, what tools ran, and what files were touched
 - **Hotkey support** — bind a key to toggle the voice connection without touching the panel
 - **Context banner** — always shows which file and how many chars the AI has as context

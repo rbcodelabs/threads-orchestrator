@@ -36,7 +36,7 @@ export interface VoiceSettings {
   wakeWordThreshold: number;
   /** Voice templates from enrollment (top-3 averaged embedding vectors, each 96 floats). */
   enrollmentEmbeddings: number[][] | null;
-  /** Own orchestrator wake-ups (via Claude Threads delegation) instead of letting core ping them. */
+  /** Own orchestrator wake-ups (via Agent Threads delegation) instead of letting core ping them. */
   wakeOrchestratorsOnActivity: boolean;
   legacyVoiceMigration?: 1;
 }
@@ -399,8 +399,8 @@ export class ThreadsOrchestratorSettingTab extends PluginSettingTab {
     containerEl.createEl('h2', { text: 'Orchestrators' });
 
     new Setting(containerEl)
-      .setName('Wake orchestrators on thread activity')
-      .setDesc('When a thread finishes or fails, ping the Portfolio or Project orchestrator to review it. Requires a Claude Threads version that supports wake-up delegation; otherwise Claude Threads keeps doing this itself.')
+      .setName('Handle orchestrator wake-ups in this plugin')
+      .setDesc('When a thread finishes or fails, this plugin pings the Portfolio or Project orchestrator to review it. Turning this off hands wake-ups back to Agent Threads. Requires an Agent Threads version that supports wake-up delegation; otherwise Agent Threads keeps handling wake-ups itself.')
       .addToggle(toggle => {
         toggle
           .setValue(this.plugin.settings.wakeOrchestratorsOnActivity)

@@ -163,6 +163,9 @@ export class WakeupService {
       if (errorCode(error) === 'THREAD_BUSY') { this.holdForRetry(bucket, entries, held?.retries ?? 0); return; }
       if (bucket.startsWith('project:')) {
         // Only an enabled Project whose orchestrator could not be reached gets the summary-only ping.
+        // 'gone' (absent from list()) is ambiguous: deleted, disabled with a retired thread, or never created.
+        // We deliberately DROP it: pinging the portfolio about a disabled Project would leak activity the user
+        // turned off, and the 60-minute heartbeat is the backstop for the never-created case.
         if (await this.projectState(bucket) !== 'enabled' || !isCurrent()) return;
         await this.sendSummaryOnly(bucket, isCurrent);
       } else this.options.onError?.(error);

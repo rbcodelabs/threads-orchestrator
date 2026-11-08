@@ -52,8 +52,16 @@ export class WakeupLifecycle {
       this.options.onWarn?.(`Could not claim orchestrator wake-up delegation: ${error instanceof Error ? error.message : String(error)}`);
       return;
     }
-    const service = this.options.createService?.(api) ?? new WakeupService(api, { onWarn: this.options.onWarn, onError: this.options.onError });
-    service.start();
+    let service: WakeupServiceLike;
+    try {
+      service = this.options.createService?.(api) ?? new WakeupService(api, { onWarn: this.options.onWarn, onError: this.options.onError });
+      service.start();
+    } catch (error) {
+      // Do not leak the claim: it would keep core's wake-ups suppressed with nothing sending them.
+      delegate.dispose();
+      this.options.onWarn?.(`Could not start orchestrator wake-up service: ${error instanceof Error ? error.message : String(error)}`);
+      return;
+    }
     this.active = { api, delegate, service };
   }
 

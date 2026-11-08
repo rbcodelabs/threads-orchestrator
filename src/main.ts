@@ -13,6 +13,7 @@ import { installLegacyViewBridge } from './LegacyViewBridge';
 import { siblingPluginDataPath } from './PluginDataPath';
 import { readAdapterText } from './PluginDataReader';
 import { WakeupLifecycle } from './WakeupLifecycle';
+import { runAllSafely } from './SafeTeardown';
 
 export default class ThreadsOrchestratorPlugin extends Plugin {
   settings!: VoiceSettings;
@@ -51,6 +52,8 @@ export default class ThreadsOrchestratorPlugin extends Plugin {
       onError: error => console.error('[Threads Orchestrator] Orchestrator wake-up failed:', error),
     });
     this.wakeupLifecycle.start();
+    // Idempotent safety net: the delegate must be released even if a later unload step throws.
+    this.register(() => this.wakeupLifecycle?.dispose());
     this.controller.startTrackingActiveFile();
 
     // Start wake word detector once the workspace is fully ready.
@@ -141,16 +144,16 @@ export default class ThreadsOrchestratorPlugin extends Plugin {
   }
 
   async onunload() {
-    this.controller.destroy();
-    this.wakeupLifecycle?.dispose();
-    this.wakeupLifecycle = null;
-    this.threadsApi.dispose();
-    // Detach all Voice panel leaves on unload so Obsidian doesn't keep a
-    // stale VoiceView instance alive across plugin reloads or BRAT updates.
-    this.app.workspace.detachLeavesOfType(THREADS_ORCHESTRATOR_VOICE_VIEW_TYPE);
-    if (this.legacyViewBridgeRegistered) {
-      this.app.workspace.detachLeavesOfType(LEGACY_ORCHESTRATOR_VOICE_VIEW_TYPE);
-    }
+    // Wake-up lifecycle first: core cannot see a peer unload, so a leaked delegate keeps its wake-ups suppressed.
+    runAllSafely([
+      () => { this.wakeupLifecycle?.dispose(); this.wakeupLifecycle = null; },
+      () => this.controller.destroy(),
+      () => this.threadsApi.dispose(),
+      // Detach all Voice panel leaves on unload so Obsidian doesn't keep a
+      // stale VoiceView instance alive across plugin reloads or BRAT updates.
+      () => this.app.workspace.detachLeavesOfType(THREADS_ORCHESTRATOR_VOICE_VIEW_TYPE),
+      () => { if (this.legacyViewBridgeRegistered) this.app.workspace.detachLeavesOfType(LEGACY_ORCHESTRATOR_VOICE_VIEW_TYPE); },
+    ], error => console.error('[Threads Orchestrator] unload step failed:', error));
   }
 
   /** Called from the settings tab whenever wakeWordEnabled or wakeWord changes. */

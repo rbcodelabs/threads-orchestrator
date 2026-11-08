@@ -136,4 +136,18 @@ describe('WakeupLifecycle', () => {
     expect(services).toHaveLength(0);
     expect(onWarn).toHaveBeenCalled();
   });
+
+  it('disposes the claimed delegate and stays inactive when the service fails to start', () => {
+    const { api, delegateWakeup, delegateDispose } = makeApi(['orchestrators.wakeup.delegate']);
+    (api.threads.subscribe as ReturnType<typeof vi.fn>).mockImplementation(() => { throw Object.assign(new Error('stopped'), { code: 'PLUGIN_UNAVAILABLE' }); });
+    const onWarn = vi.fn();
+    const lifecycle = new WakeupLifecycle({ client: makeClient(api), pluginId: 'p', isEnabled: () => true, onWarn });
+    lifecycle.start();
+    expect(delegateDispose).toHaveBeenCalledTimes(1);
+    expect(onWarn).toHaveBeenCalledTimes(1);
+    // A failed start leaves nothing active; a later sync retries with a fresh claim and disposes it again, never stacking tokens.
+    lifecycle.sync();
+    expect(delegateWakeup).toHaveBeenCalledTimes(2);
+    expect(delegateDispose).toHaveBeenCalledTimes(2);
+  });
 });
