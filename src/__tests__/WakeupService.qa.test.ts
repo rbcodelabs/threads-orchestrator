@@ -260,12 +260,13 @@ describe('WakeupService QA: Project state re-check at flush (fix 71cdfb8)', () =
     expect(ids(t)).toEqual(['project:p1']);
   });
 
-  it('a Project deleted during the debounce (ORCHESTRATOR_NOT_FOUND, gone from list) leaks no summary-only ping', async () => {
+  it('a Project gone from the list after a failed dispatch gets the summary-only ping, like core', async () => {
     const t = setup({ ...proj, orchestrators: [portfolio, p1(true)], dispatch: async () => { throw err('ORCHESTRATOR_NOT_FOUND'); } });
     t.emit('run.completed', 'w'); await t.settle();
     t.state.orchestrators = [portfolio];
     await t.fire();
-    expect(ids(t)).toEqual(['project:p1']);
+    expect(ids(t)).toEqual(['project:p1', 'portfolio']);
+    expect(t.dispatch.mock.calls[1][1].prompt).toBe('New activity in Project p1 — the Project orchestrator could not be reached.');
   });
 
   it('race: enabled at the first read, disabled at the second read after a generic dispatch failure -> dropped', async () => {
@@ -325,12 +326,26 @@ describe('WakeupService QA: Project state re-check at flush (fix 71cdfb8)', () =
     expect(JSON.stringify(t.dispatch.mock.calls[1])).not.toContain('Secret');
   });
 
-  it('a listed enabled:false thread-less entry (threadId empty) is dropped with no portfolio ping', async () => {
-    const disabledNoThread = { id: 'project:p1', kind: 'project', threadId: '', projectId: 'p1', title: 'P1 orchestrator', enabled: false } as OrchestratorSnapshot;
-    const t = setup({ ...proj, orchestrators: [portfolio, p1(true)], dispatch: async target => { if (target.id === 'project:p1') throw new Error('x'); return { runId: 'r' }; } });
+  const disabledNoThread = { id: 'project:p1', kind: 'project', threadId: '', projectId: 'p1', title: 'P1 orchestrator', enabled: false } as OrchestratorSnapshot;
+
+  it('a listed enabled:false thread-less entry at flush start drops the batch with no dispatch at all', async () => {
+    const t = setup({ ...proj, orchestrators: [portfolio, p1(true)] });
     t.emit('run.failed', 'w'); await t.settle();
     t.state.orchestrators = [portfolio, disabledNoThread];
     await t.fire();
+    expect(t.dispatch).not.toHaveBeenCalled();
+  });
+
+  it('enabled at flush start, dispatch fails, fresh re-read shows the thread-less enabled:false entry -> one attempt, no portfolio ping', async () => {
+    let t!: ReturnType<typeof setup>;
+    t = setup({
+      ...proj, orchestrators: [portfolio, p1(true)],
+      dispatch: async target => {
+        if (target.id === 'project:p1') { t.state.orchestrators = [portfolio, disabledNoThread]; throw err('ORCHESTRATOR_NOT_FOUND'); }
+        return { runId: 'r' };
+      },
+    });
+    t.emit('run.failed', 'w'); await t.settle(); await t.fire();
     expect(ids(t)).toEqual(['project:p1']);
   });
 
