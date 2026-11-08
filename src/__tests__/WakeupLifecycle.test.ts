@@ -150,4 +150,16 @@ describe('WakeupLifecycle', () => {
     expect(delegateWakeup).toHaveBeenCalledTimes(2);
     expect(delegateDispose).toHaveBeenCalledTimes(2);
   });
+
+  it('still disposes the delegate exactly once when the client unsubscribe throws; a second dispose is a no-op', () => {
+    const { api, delegateDispose } = makeApi(['orchestrators.wakeup.delegate']);
+    const client = makeClient(api);
+    client.onChange = () => () => { throw new Error('unsubscribe failed'); };
+    const lifecycle = new WakeupLifecycle({ client, pluginId: 'p', isEnabled: () => true, createService: () => ({ start() {}, stop() {} }) });
+    lifecycle.start();
+    try { lifecycle.dispose(); } catch { /* the unsubscribe error may propagate; the delegate must be released regardless */ }
+    expect(delegateDispose).toHaveBeenCalledTimes(1);
+    expect(() => lifecycle.dispose()).not.toThrow();
+    expect(delegateDispose).toHaveBeenCalledTimes(1);
+  });
 });
