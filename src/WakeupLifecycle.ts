@@ -77,7 +77,13 @@ export class WakeupLifecycle {
     const active = this.active;
     this.active = null;
     if (!active) return;
-    active.service.stop();
-    active.delegate.dispose();
+    // Always hand the delegation back, even if stopping the service throws:
+    // core cannot see a peer unload, so a leaked delegate keeps core wake-ups
+    // suppressed until Agent Threads itself reloads.
+    try {
+      active.service.stop();
+    } finally {
+      active.delegate.dispose();
+    }
   }
 }
