@@ -77,8 +77,6 @@ export class WakeupService {
   private async onEvent(event: PublicThreadEvent): Promise<void> {
     // A stopped service must be inert even if the host keeps delivering events to a stale listener.
     if (!this.subscription) return;
-    // A stopped service must be inert even if the host keeps delivering events to a stale listener.
-    if (!this.subscription) return;
     if (event.kind !== 'run.completed' && event.kind !== 'run.failed') return;
     const epoch = this.epoch;
     const status: Status = event.kind === 'run.completed' ? 'done' : 'error';
@@ -145,6 +143,10 @@ export class WakeupService {
     this.pending.delete(bucket);
     if (entries.size === 0) return;
 
+    // Core re-checks orchestratorEnabled at flush; a Project disabled during the debounce is dropped silently.
+    if (bucket.startsWith('project:') && await this.projectState(bucket) === 'disabled') return;
+    if (!isCurrent()) return;
+
     let prompt: string;
     try {
       prompt = await this.composeMessage([...entries]);
@@ -159,8 +161,22 @@ export class WakeupService {
     } catch (error) {
       if (!isCurrent()) return;
       if (errorCode(error) === 'THREAD_BUSY') { this.holdForRetry(bucket, entries, held?.retries ?? 0); return; }
-      if (bucket.startsWith('project:')) await this.sendSummaryOnly(bucket, isCurrent);
-      else this.options.onError?.(error);
+      if (bucket.startsWith('project:')) {
+        // Only an enabled Project whose orchestrator could not be reached gets the summary-only ping.
+        if (await this.projectState(bucket) !== 'enabled' || !isCurrent()) return;
+        await this.sendSummaryOnly(bucket, isCurrent);
+      } else this.options.onError?.(error);
+    }
+  }
+
+  /** Fresh read of the Project orchestrator: 'gone' when absent, 'disabled' when enabled === false. Unknown on list failure. */
+  private async projectState(bucket: string): Promise<'enabled' | 'disabled' | 'gone' | 'unknown'> {
+    try {
+      const snapshot = (await this.api.orchestrators.list()).find(o => o.id === bucket);
+      if (!snapshot) return 'gone';
+      return snapshot.enabled === false ? 'disabled' : 'enabled';
+    } catch {
+      return 'unknown';
     }
   }
 

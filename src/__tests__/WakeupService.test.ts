@@ -8,7 +8,6 @@ const HEADER_2 = 'New activity on 2 threads. Review only the named changed threa
 interface ThreadFixture { title?: string; projectId?: string; updatedAt?: number }
 
 function busyError() { return Object.assign(new Error('busy'), { code: 'THREAD_BUSY' }); }
-function notFoundError() { return Object.assign(new Error('nope'), { code: 'ORCHESTRATOR_NOT_FOUND' }); }
 const portfolio = { id: 'portfolio', kind: 'portfolio', threadId: 'orch-portfolio', title: 'Portfolio' } as OrchestratorSnapshot;
 
 function setup(options: {
@@ -176,10 +175,11 @@ describe('WakeupService', () => {
     expect(t.dispatch).not.toHaveBeenCalled();
   });
 
-  it('falls back to a summary-only portfolio dispatch when the Project dispatch fails', async () => {
+  it('falls back to a summary-only portfolio dispatch when an enabled Project orchestrator cannot be reached', async () => {
     const t = setup({
       threads: { w: { title: 'Sensitive task', projectId: 'p1' } },
-      dispatch: async target => { if (target.id === 'project:p1') throw notFoundError(); return { runId: 'r' }; },
+      orchestrators: [portfolio, { id: 'project:p1', kind: 'project', threadId: 'orch-p1', projectId: 'p1', title: 'P1', enabled: true } as OrchestratorSnapshot],
+      dispatch: async target => { if (target.id === 'project:p1') throw new Error('creation failed'); return { runId: 'r' }; },
     });
     t.emit({ kind: 'run.failed', threadId: 'w' });
     await t.settle();
