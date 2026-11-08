@@ -21,7 +21,6 @@ Coordinate documents and Claude agents through a voice-first interface. Threads 
   - Wake-ups are sent with queueIfBusy, so a busy orchestrator queues them. If Agent Threads still reports THREAD_BUSY, the batch is retried when the orchestrator next completes a run, at most 3 times, then dropped (the 60-minute heartbeat is the backstop).
   - A batch still waiting out its 12 s debounce is discarded when the plugin unloads or the toggle is turned off; the heartbeat covers it.
   - A failed delegation claim is retried only when the Agent Threads API changes (restart/reload) or the setting is toggled.
-  - If a Project orchestrator fails to be created (or is absent from the orchestrator list after a failed dispatch), the plugin sends no summary-only portfolio ping; the 60-minute heartbeat is the backstop. A Project that is enabled and listed but unreachable still gets a summary-only portfolio ping that names no thread details.
 - **Rich sidebar transcript** — see what was said, what tools ran, and what files were touched
 - **Hotkey support** — bind a key to toggle the voice connection without touching the panel
 - **Context banner** — always shows which file and how many chars the AI has as context

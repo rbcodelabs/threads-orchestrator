@@ -19,6 +19,7 @@ export type PublicThreadEvent =
   | { readonly kind: 'run.failed'; readonly threadId: string; readonly runId: string; readonly error: PublicError; readonly at: number }
   | { readonly kind: 'thread.removed'; readonly threadId: string; readonly at: number };
 export interface Disposable { dispose(): void }
+/** threadId is '' for a DISABLED Project that has no orchestrator thread (core lists it with enabled:false); enabled Projects without a thread are absent. */
 export interface OrchestratorSnapshot { readonly id: string; readonly kind: 'portfolio' | 'project'; readonly threadId: string; readonly title: string; readonly projectId?: string; /** Absent on older cores; treat undefined as true. */ readonly enabled?: boolean }
 export interface DispatchInput extends SendInput { /** Queue the prompt if the orchestrator is busy instead of throwing THREAD_BUSY. */ readonly queueIfBusy?: boolean }
 export const WAKEUP_DELEGATE_CAPABILITY = 'orchestrators.wakeup.delegate';

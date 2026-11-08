@@ -55,9 +55,11 @@ export class WakeupService {
   }
 
   stop(): void {
-    this.subscription?.dispose();
+    // Make the service inert first: a throwing dispose() (or a host that keeps a stale listener) must not leave it live.
+    const subscription = this.subscription;
     this.subscription = null;
     this.epoch++;
+    try { subscription?.dispose(); } catch (error) { this.options.onError?.(error); }
     for (const bucket of [...this.timers.keys()]) this.clearTimer(bucket);
     this.pending.clear();
     this.held.clear();
@@ -162,17 +164,20 @@ export class WakeupService {
       if (!isCurrent()) return;
       if (errorCode(error) === 'THREAD_BUSY') { this.holdForRetry(bucket, entries, held?.retries ?? 0); return; }
       if (bucket.startsWith('project:')) {
-        // Only an enabled Project whose orchestrator could not be reached gets the summary-only ping.
-        // 'gone' (absent from list()) is ambiguous: deleted, disabled with a retired thread, or never created.
-        // We deliberately DROP it: pinging the portfolio about a disabled Project would leak activity the user
-        // turned off, and the 60-minute heartbeat is the backstop for the never-created case.
-        if (await this.projectState(bucket) !== 'enabled' || !isCurrent()) return;
+        // Core lists DISABLED Projects (enabled:false, even without a thread), so after a failed dispatch:
+        //  - disabled        -> drop silently (the user turned it off; do not leak activity)
+        //  - enabled/absent  -> the Project orchestrator could not be created/reached: summary-only portfolio ping
+        //  - list read failed-> drop and log (cannot tell the cases apart; the 60-minute heartbeat is the backstop)
+        const state = await this.projectState(bucket);
+        if (!isCurrent()) return;
+        if (state === 'unknown') { this.options.onWarn?.(`Orchestrator wake-up: could not re-read orchestrators for ${bucket}, dropping batch`); return; }
+        if (state === 'disabled') return;
         await this.sendSummaryOnly(bucket, isCurrent);
       } else this.options.onError?.(error);
     }
   }
 
-  /** Fresh read of the Project orchestrator: 'gone' when absent, 'disabled' when enabled === false. Unknown on list failure. */
+  /** Fresh read of the Project orchestrator: 'gone' when absent (enabled-without-thread, creation failed, or deleted), 'disabled' when listed with enabled === false. 'unknown' on list failure. */
   private async projectState(bucket: string): Promise<'enabled' | 'disabled' | 'gone' | 'unknown'> {
     try {
       const snapshot = (await this.api.orchestrators.list()).find(o => o.id === bucket);
