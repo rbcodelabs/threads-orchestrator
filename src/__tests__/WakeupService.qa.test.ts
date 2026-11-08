@@ -382,3 +382,67 @@ describe('WakeupService QA: Project state re-check at flush (fix 71cdfb8)', () =
     expect(t.dispatch.mock.calls[1][1].prompt).toBe('New activity in Project p1 — the Project orchestrator could not be reached.');
   });
 });
+
+describe('WakeupService QA round 2: thread-less disabled entries and summary-only edge cases', () => {
+  const dnt = { id: 'project:p1', kind: 'project', threadId: '', projectId: 'p1', title: 'P1 orchestrator', enabled: false } as OrchestratorSnapshot;
+  const ids = (t: ReturnType<typeof setup>) => t.dispatch.mock.calls.map(c => c[0].id);
+
+  it('a listed thread-less disabled entry (threadId "") does not capture unrelated events as an orchestrator thread', async () => {
+    const t = setup({ threads: { a: { title: 'A' } }, orchestrators: [portfolio, dnt] });
+    t.emit('run.completed', 'a'); await t.settle(); await t.fire();
+    expect(ids(t)).toEqual(['portfolio']);
+  });
+
+  it('a worker in a Project listed only as a thread-less disabled entry is dropped at event time (nothing scheduled)', async () => {
+    const t = setup({ threads: { w: { title: 'W', projectId: 'p1' } }, orchestrators: [portfolio, dnt] });
+    t.emit('run.completed', 'w'); await t.settle();
+    expect(t.callbacks).toHaveLength(0);
+    await t.fire();
+    expect(t.dispatch).not.toHaveBeenCalled();
+  });
+
+  it('a list failure after a failed dispatch warns (once) and drops, without calling onError', async () => {
+    const t = setup({ threads: { w: { projectId: 'p1' } }, orchestrators: [portfolio, p1(true)], dispatch: async () => { throw new Error('x'); } });
+    t.emit('run.completed', 'w'); await t.settle();
+    let n = 0; t.list.mockImplementation(async () => { if (++n >= 2) throw new Error('down'); return [portfolio, p1(true)]; });
+    await t.fire();
+    expect(t.warn).toHaveBeenCalledTimes(1);
+    expect(t.warn.mock.calls[0][0]).toContain('project:p1');
+    expect(ids(t)).toEqual(['project:p1']);
+  });
+
+  it('summary-only goes to the portfolio exactly once per failed batch and a failing summary dispatch reports onError once', async () => {
+    const t = setup({ threads: { w: { projectId: 'p1' } }, orchestrators: [portfolio, p1(true)], dispatch: async () => { throw new Error('all down'); } });
+    t.emit('run.completed', 'w'); await t.settle(); await t.fire();
+    await t.fire();
+    expect(ids(t)).toEqual(['project:p1', 'portfolio']);
+    expect(t.error).toHaveBeenCalledTimes(1);
+  });
+
+  it('two Projects failing in one window each produce their own summary-only ping naming only their own id', async () => {
+    const q = { id: 'project:p2', kind: 'project', threadId: 'orch-p2', projectId: 'p2', title: 'P2', enabled: true } as OrchestratorSnapshot;
+    const t = setup({
+      threads: { w1: { title: 'S1', projectId: 'p1' }, w2: { title: 'S2', projectId: 'p2' } }, orchestrators: [portfolio, p1(true), q],
+      dispatch: async target => { if (target.id.startsWith('project:')) throw new Error('x'); return { runId: 'r' }; },
+    });
+    t.emit('run.completed', 'w1'); t.emit('run.completed', 'w2'); await t.settle(); await t.fire();
+    const summaries = t.dispatch.mock.calls.filter(c => c[0].id === 'portfolio').map(c => c[1].prompt).sort();
+    expect(summaries).toEqual([
+      'New activity in Project p1 — the Project orchestrator could not be reached.',
+      'New activity in Project p2 — the Project orchestrator could not be reached.',
+    ]);
+  });
+
+  it('invalidateBucket between the failed dispatch and the summary-only send suppresses the ping', async () => {
+    let t!: ReturnType<typeof setup>;
+    t = setup({
+      threads: { w: { projectId: 'p1' } }, orchestrators: [portfolio, p1(true)],
+      dispatch: async target => { if (target.id === 'project:p1') { setTimeout(() => {}, 0); throw new Error('x'); } return { runId: 'r' }; },
+    });
+    t.emit('run.completed', 'w'); await t.settle();
+    let n = 0; const orig = t.list.getMockImplementation()!;
+    t.list.mockImplementation(async () => { if (++n === 2) t.service.invalidateBucket('project:p1'); return orig(); });
+    await t.fire();
+    expect(ids(t)).toEqual(['project:p1']);
+  });
+});
