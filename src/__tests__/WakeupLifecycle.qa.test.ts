@@ -172,3 +172,37 @@ describe('WakeupLifecycle QA', () => {
     expect(order).toEqual(['service.stop', 'delegate.dispose']);
   });
 });
+
+describe('WakeupLifecycle QA: teardown robustness (a99ed43)', () => {
+  it('releases the delegate even when service.stop() throws (a leaked claim keeps core wake-ups suppressed)', () => {
+    const a = makeApi('g1', []);
+    const dispose = vi.fn();
+    (a.api.orchestrators.delegateWakeup as unknown as ReturnType<typeof vi.fn>).mockImplementation(() => ({ dispose }));
+    const lc = new WakeupLifecycle({ client: makeClient(a.api), pluginId: 'p', isEnabled: () => true, createService: () => ({ start() {}, stop() { throw new Error('stop failed'); } }) });
+    lc.start();
+    try { lc.dispose(); } catch { /* tolerated: the claim must still be released */ }
+    expect(dispose).toHaveBeenCalledTimes(1);
+  });
+
+  it('dispose() twice (onunload then the register() safety net) disposes the delegate exactly once', () => {
+    const a = makeApi('g1', []);
+    const dispose = vi.fn();
+    (a.api.orchestrators.delegateWakeup as unknown as ReturnType<typeof vi.fn>).mockImplementation(() => ({ dispose }));
+    const lc = new WakeupLifecycle({ client: makeClient(a.api), pluginId: 'p', isEnabled: () => true });
+    lc.start(); lc.dispose(); lc.dispose();
+    expect(dispose).toHaveBeenCalledTimes(1);
+  });
+
+  it('a service whose start() throws releases the claim and a later sync can retry', () => {
+    const a = makeApi('g1', []);
+    const dispose = vi.fn();
+    (a.api.orchestrators.delegateWakeup as unknown as ReturnType<typeof vi.fn>).mockImplementation(() => ({ dispose }));
+    let n = 0;
+    const lc = new WakeupLifecycle({ client: makeClient(a.api), pluginId: 'p', isEnabled: () => true, onWarn: () => {}, createService: () => ({ start() { if (++n === 1) throw new Error('boom'); }, stop() {} }) });
+    lc.start();
+    expect(dispose).toHaveBeenCalledTimes(1);
+    lc.sync();
+    expect(n).toBe(2);
+    expect(dispose).toHaveBeenCalledTimes(1);
+  });
+});

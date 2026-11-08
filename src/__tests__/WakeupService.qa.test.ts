@@ -316,11 +316,15 @@ describe('WakeupService QA: Project state re-check at flush (fix 71cdfb8)', () =
     expect(t.dispatch).not.toHaveBeenCalled();
   });
 
-  it('PARITY PROBE: a Project with no orchestrator thread yet whose lazy creation fails still gets the summary-only portfolio ping (core: ensureProjectOrchestratorThread throws -> summaryOnly)', async () => {
+  it('KNOWN LIMITATION (orchestrator decision): a Project absent from orchestrators.list() after a failed dispatch is DROPPED, not summarised (core would send summary-only when lazy creation fails)', async () => {
+    // Absent is ambiguous: deleted, disabled with a retired thread, or never created. Pinging the portfolio would
+    // leak activity of a disabled Project, so the plugin drops it and the 60-minute heartbeat is the backstop.
+    // Future fix: have core's orchestrators.list also report disabled Projects that have no thread, so 'never created' can be told apart.
+    // If that lands, flip this test to expect ['project:p1', 'portfolio'] and keep the disabled-Project tests above green.
     const t = setup({ ...proj, dispatch: async target => { if (target.id === 'project:p1') throw new Error('creation failed'); return { runId: 'r' }; } });
     t.emit('run.failed', 'w'); await t.settle(); await t.fire();
-    expect(ids(t)).toEqual(['project:p1', 'portfolio']);
-    expect(JSON.stringify(t.dispatch.mock.calls[1])).not.toContain('Secret');
+    expect(ids(t)).toEqual(['project:p1']);
+    expect(t.error).not.toHaveBeenCalled();
   });
 
   it('summary-only never contains Project thread details even when sent after the re-check', async () => {
