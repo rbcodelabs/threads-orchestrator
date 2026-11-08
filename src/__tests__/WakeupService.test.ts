@@ -285,7 +285,7 @@ describe('WakeupService', () => {
     expect(t.callbacks).toHaveLength(0);
   });
 
-  it('PARITY DECISION: a Project absent from list() after a failed dispatch is dropped, with no summary-only portfolio ping', async () => {
+  it('a Project absent from list() after a failed dispatch gets the summary-only portfolio ping', async () => {
     const t = setup({
       threads: { w: { title: 'Task', projectId: 'p1' } },
       dispatch: async target => { if (target.id === 'project:p1') throw new Error('creation failed'); return { runId: 'r' }; },
@@ -293,6 +293,7 @@ describe('WakeupService', () => {
     t.emit({ kind: 'run.completed', threadId: 'w' });
     await t.settle();
     await t.fire();
-    expect(t.dispatch.mock.calls.map(c => c[0].id)).toEqual(['project:p1']);
+    expect(t.dispatch.mock.calls.map(c => c[0].id)).toEqual(['project:p1', 'portfolio']);
+    expect(t.dispatch.mock.calls[1][1].prompt).toBe('New activity in Project p1 — the Project orchestrator could not be reached.');
   });
 });

@@ -316,15 +316,49 @@ describe('WakeupService QA: Project state re-check at flush (fix 71cdfb8)', () =
     expect(t.dispatch).not.toHaveBeenCalled();
   });
 
-  it('KNOWN LIMITATION (orchestrator decision): a Project absent from orchestrators.list() after a failed dispatch is DROPPED, not summarised (core would send summary-only when lazy creation fails)', async () => {
-    // Absent is ambiguous: deleted, disabled with a retired thread, or never created. Pinging the portfolio would
-    // leak activity of a disabled Project, so the plugin drops it and the 60-minute heartbeat is the backstop.
-    // Future fix: have core's orchestrators.list also report disabled Projects that have no thread, so 'never created' can be told apart.
-    // If that lands, flip this test to expect ['project:p1', 'portfolio'] and keep the disabled-Project tests above green.
+  it('a Project absent from orchestrators.list() after a failed dispatch gets the summary-only portfolio ping (creation failed / never created)', async () => {
+    // Core now lists DISABLED Projects (threadId ''), so absent means enabled-without-thread or creation failed: not a disabled leak.
     const t = setup({ ...proj, dispatch: async target => { if (target.id === 'project:p1') throw new Error('creation failed'); return { runId: 'r' }; } });
     t.emit('run.failed', 'w'); await t.settle(); await t.fire();
+    expect(ids(t)).toEqual(['project:p1', 'portfolio']);
+    expect(t.dispatch.mock.calls[1][1].prompt).toBe('New activity in Project p1 — the Project orchestrator could not be reached.');
+    expect(JSON.stringify(t.dispatch.mock.calls[1])).not.toContain('Secret');
+  });
+
+  it('a listed enabled:false thread-less entry (threadId empty) is dropped with no portfolio ping', async () => {
+    const disabledNoThread = { id: 'project:p1', kind: 'project', threadId: '', projectId: 'p1', title: 'P1 orchestrator', enabled: false } as OrchestratorSnapshot;
+    const t = setup({ ...proj, orchestrators: [portfolio, p1(true)], dispatch: async target => { if (target.id === 'project:p1') throw new Error('x'); return { runId: 'r' }; } });
+    t.emit('run.failed', 'w'); await t.settle();
+    t.state.orchestrators = [portfolio, disabledNoThread];
+    await t.fire();
     expect(ids(t)).toEqual(['project:p1']);
-    expect(t.error).not.toHaveBeenCalled();
+  });
+
+  it('a failed orchestrators.list() read after a failed dispatch drops the batch (no ping)', async () => {
+    const t = setup({ ...proj, orchestrators: [portfolio, p1(true)], dispatch: async target => { if (target.id === 'project:p1') throw new Error('x'); return { runId: 'r' }; } });
+    t.emit('run.failed', 'w'); await t.settle();
+    let calls = 0;
+    const original = t.list.getMockImplementation()!;
+    t.list.mockImplementation(async () => { if (++calls >= 2) throw new Error('list down'); return original(); });
+    await t.fire();
+    expect(ids(t)).toEqual(['project:p1']);
+  });
+
+  it('stop() is inert (and reports, not throws) even when the subscription dispose() throws', async () => {
+    let listener!: (e: PublicThreadEvent) => void;
+    const api = {
+      apiVersion: 1, generation: 'g', capabilities: [],
+      threads: { subscribe: vi.fn((fn: typeof listener) => { listener = fn; return { dispose() { throw new Error('dispose failed'); } }; }), get: vi.fn(async () => ({ id: 'a', title: 'A', updatedAt: 1, messages: [] })) },
+      orchestrators: { list: vi.fn(async () => [portfolio]), dispatch: vi.fn() },
+    } as unknown as ClaudeThreadsApiV1;
+    const callbacks: Array<() => void> = []; const onError = vi.fn();
+    const service = new WakeupService(api, { setTimeoutFn: cb => { callbacks.push(cb); return cb; }, clearTimeoutFn: () => {}, onError });
+    service.start();
+    expect(() => service.stop()).not.toThrow();
+    expect(onError).toHaveBeenCalledTimes(1);
+    listener({ kind: 'run.completed', threadId: 'a', runId: 'r', at: 1 } as PublicThreadEvent);
+    for (let i = 0; i < 30; i++) await Promise.resolve();
+    expect(callbacks).toHaveLength(0);
   });
 
   it('summary-only never contains Project thread details even when sent after the re-check', async () => {
