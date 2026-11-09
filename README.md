@@ -17,17 +17,22 @@ Coordinate documents and Claude agents through a voice-first interface. Threads 
   - Open any note in a new tab
   - List outgoing links
 - **Claude Threads API v1 integration** — create, inspect, message, wait for, and open threads through Claude Threads' published API; discover and dispatch to Portfolio/Project orchestrators; receive semantic completion notifications
-- **Orchestrator wake-ups** — when a thread finishes or fails, this plugin pings the Portfolio/Project orchestrator (batched, 12 s debounce). Requires an Agent Threads version with wake-up delegation (capability `orchestrators.wakeup.delegate`); on older versions Agent Threads keeps doing this itself. Toggle in Settings → Orchestrators → *Handle orchestrator wake-ups in this plugin* (default on); turning it off hands wake-ups back to Agent Threads. Known limits:
-  - Wake-ups are sent with queueIfBusy, so a busy orchestrator queues them. If Agent Threads still reports THREAD_BUSY, the batch is retried when the orchestrator next completes a run, at most 3 times, then dropped (the 60-minute heartbeat is the backstop).
-  - A batch still waiting out its 12 s debounce is discarded when the plugin unloads or the toggle is turned off; the heartbeat covers it.
-  - A Project that was deleted (or is otherwise absent from the orchestrator list) after a failed dispatch gets one summary-only portfolio ping naming only the Project id (parity with Agent Threads, no thread details).
-  - A failed delegation claim is retried only when the Agent Threads API changes (restart/reload) or the setting is toggled.
+- **Orchestration (owned by this plugin)** — Agent Threads core no longer wakes orchestrators, runs a heartbeat, or ships the orchestrator skill; this plugin does all three and **requires an Agent Threads version with capabilities `orchestrators.ensure`, `orchestrators.setEnabled` and `extensions.registerSkill`** (there is no fallback; without them these features stay off and a warning is logged once per Agent Threads start). In particular, a new core with an old plugin means no wake-ups and no heartbeat (core removed its own), so ship them together. Settings → Orchestrators:
+  - *Wake orchestrators on thread activity* (default on): when a thread finishes or fails, the Portfolio/Project orchestrator is pinged (batched, 12 s debounce). Wake-ups go only to orchestrators that already exist: the Portfolio orchestrator is never created by a wake-up, while a Project orchestrator is created on its first completed thread. Off means the plugin sends no wake-ups.
+  - *Orchestrator heartbeat* (default on, every 60 minutes, configurable 5-1440; stored values outside the range are clamped, so below 5 becomes 5; first fires one interval after load, not at startup): asks the Portfolio orchestrator and each enabled Project orchestrator to reconcile missed activity, queued if busy. It never creates an orchestrator that does not exist yet. This is a timer by design: it is the time-based backstop for missed events.
+  - A list of orchestrators: open one (creating it if needed) and enable/disable Project orchestrators. The Portfolio orchestrator cannot be disabled.
+  - The `thread-orchestrator` skill ships inside this plugin and is registered with Agent Threads on load (and removed on unload).
+  - Known limits:
+    - Wake-ups are sent with queueIfBusy. If Agent Threads still reports THREAD_BUSY, the batch is retried when the orchestrator next completes a run, at most 3 times, then dropped (the heartbeat is the backstop).
+    - A batch still waiting out its 12 s debounce is discarded when the plugin unloads or the toggle is turned off; the heartbeat covers it.
+    - A Project that was deleted (or is otherwise absent from the orchestrator list) after a failed dispatch gets one summary-only portfolio ping naming only the Project id.
 - **Rich sidebar transcript** — see what was said, what tools ran, and what files were touched
 - **Hotkey support** — bind a key to toggle the voice connection without touching the panel
 - **Context banner** — always shows which file and how many chars the AI has as context
 
 ## Requirements
 
+- A Claude Threads (Agent Threads) release that provides the orchestrator extraction API (`orchestrators.ensure`, `orchestrators.setEnabled`, `extensions.registerSkill`); this plugin version must be released together with it
 - An [OpenAI API key](https://platform.openai.com/api-keys) with Realtime API access
 - Obsidian 1.11.4 or later, or compatible desktop Geode (verified with Geode 0.22.7). Geode advertises Obsidian API compatibility level 1.10.2; this is not its app version. Required secret-storage APIs are checked at startup.
 - Context files use inline suggestions in Obsidian and an “Add context file…” search modal in Geode.
@@ -112,6 +117,9 @@ Compatibility changes in 0.1.0: `ct_close_thread` remains excluded, and `ct_get_
 |---|---|---|
 | Voice | Marin | AI voice used for responses |
 | Extra system prompt | — | Additional instructions appended to the base prompt |
+| Wake orchestrators on thread activity | On | Send orchestrator wake-ups when threads finish or fail |
+| Orchestrator heartbeat | On | Periodic reconcile ping to enabled orchestrators |
+| Heartbeat interval (minutes) | 60 | 5-1440 |
 | Enable wake word | Off | Listen for "hey obsidian" to auto-connect |
 | Detection threshold | 0.75 | Confidence required to trigger (0–1). Lower = more sensitive. Calibrate sets this automatically. |
 | Silence timeout | 15s | Seconds of silence before auto-disconnect (0 = disabled) |

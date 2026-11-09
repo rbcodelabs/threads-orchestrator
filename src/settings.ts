@@ -3,6 +3,7 @@ import { attachVaultFilePicker } from './VaultFilePicker';
 import type ThreadsOrchestratorPlugin from './main';
 import { isWakeWordAvailable } from './WakeWordDetector';
 import { EnrollmentModal } from './EnrollmentModal';
+import { OrchestratorSettingsModel } from './OrchestratorSettingsModel';
 
 export const REALTIME_MODEL = 'gpt-realtime-2';
 export const OPENAI_SECRET_ID = 'openai-api-key';
@@ -36,8 +37,12 @@ export interface VoiceSettings {
   wakeWordThreshold: number;
   /** Voice templates from enrollment (top-3 averaged embedding vectors, each 96 floats). */
   enrollmentEmbeddings: number[][] | null;
-  /** Own orchestrator wake-ups (via Agent Threads delegation) instead of letting core ping them. */
+  /** Send orchestrator wake-ups when other threads finish or fail. */
   wakeOrchestratorsOnActivity: boolean;
+  /** Periodically ask the orchestrators to reconcile missed activity. */
+  heartbeatEnabled: boolean;
+  /** Minutes between heartbeats (5-1440). */
+  heartbeatIntervalMinutes: number;
   legacyVoiceMigration?: 1;
 }
 
@@ -54,6 +59,8 @@ export const DEFAULT_SETTINGS: Omit<VoiceSettings, 'openaiApiKey'> = {
   wakeWordThreshold: 0.75,
   enrollmentEmbeddings: null,
   wakeOrchestratorsOnActivity: true,
+  heartbeatEnabled: true,
+  heartbeatIntervalMinutes: 60,
 };
 
 function maskOpenAiKey(key: string | null | undefined): string {
@@ -399,8 +406,8 @@ export class ThreadsOrchestratorSettingTab extends PluginSettingTab {
     containerEl.createEl('h2', { text: 'Orchestrators' });
 
     new Setting(containerEl)
-      .setName('Handle orchestrator wake-ups in this plugin')
-      .setDesc('When a thread finishes or fails, this plugin pings the Portfolio or Project orchestrator to review it. Turning this off hands wake-ups back to Agent Threads. Requires an Agent Threads version that supports wake-up delegation; otherwise Agent Threads keeps handling wake-ups itself.')
+      .setName('Wake orchestrators on thread activity')
+      .setDesc('When a thread finishes or fails, ping the Portfolio or Project orchestrator to review it (batched). Requires a current Agent Threads version.')
       .addToggle(toggle => {
         toggle
           .setValue(this.plugin.settings.wakeOrchestratorsOnActivity)
@@ -410,6 +417,44 @@ export class ThreadsOrchestratorSettingTab extends PluginSettingTab {
             this.plugin.applyWakeupSetting();
           });
       });
+
+    new Setting(containerEl)
+      .setName('Orchestrator heartbeat')
+      .setDesc('Periodically ask the Portfolio orchestrator and every enabled Project orchestrator to reconcile activity missed by wake-ups.')
+      .addToggle(toggle => {
+        toggle
+          .setValue(this.plugin.settings.heartbeatEnabled)
+          .onChange(async (value) => {
+            this.plugin.settings.heartbeatEnabled = value;
+            await this.plugin.saveSettings();
+            this.plugin.applyHeartbeatSetting();
+          });
+      });
+
+    new Setting(containerEl)
+      .setName('Heartbeat interval (minutes)')
+      .setDesc('Minutes between heartbeats. Minimum 5, maximum 1440. Default 60.')
+      .addText(text => {
+        // Commit on blur/Enter (not per keystroke) and show the clamped value.
+        const commit = async () => {
+          const n = parseInt(text.getValue(), 10);
+          const clamped = Math.min(1440, Math.max(5, isNaN(n) ? 60 : n));
+          text.setValue(String(clamped));
+          if (clamped === this.plugin.settings.heartbeatIntervalMinutes) return;
+          this.plugin.settings.heartbeatIntervalMinutes = clamped;
+          await this.plugin.saveSettings();
+          this.plugin.applyHeartbeatSetting();
+        };
+        text.setPlaceholder('60').setValue(String(this.plugin.settings.heartbeatIntervalMinutes));
+        text.inputEl.addEventListener('blur', () => { void commit(); });
+        text.inputEl.addEventListener('keydown', (e: KeyboardEvent) => { if (e.key === 'Enter') void commit(); });
+        text.inputEl.type = 'number';
+        text.inputEl.min = '5';
+        text.inputEl.max = '1440';
+        text.inputEl.style.width = '5em';
+      });
+
+    this.renderOrchestratorList(containerEl);
 
     containerEl.createEl('h2', { text: 'Developer' });
 
@@ -426,5 +471,40 @@ export class ThreadsOrchestratorSettingTab extends PluginSettingTab {
             this.plugin.applyWakeWordSetting();
           });
       });
+  }
+
+  /** Per-orchestrator rows: open (creating if needed) and enable/disable Project orchestrators. */
+  private renderOrchestratorList(containerEl: HTMLElement): void {
+    const listEl = containerEl.createDiv();
+    const model = new OrchestratorSettingsModel(this.plugin.threadsApi);
+    const report = (error: unknown) => new Notice(`Orchestrators: ${error instanceof Error ? error.message : String(error)}`);
+    const render = async (): Promise<void> => {
+      let rows: Awaited<ReturnType<OrchestratorSettingsModel['rows']>>;
+      try { rows = await model.rows(); } catch (error) { report(error); return; }
+      listEl.empty();
+      if (!rows) {
+        listEl.createEl('p', { text: 'Agent Threads is not available. Install or enable a current Agent Threads version to manage orchestrators.' });
+        return;
+      }
+      for (const row of rows) {
+        const setting = new Setting(listEl)
+          .setName(row.title)
+          .setDesc(row.kind === 'portfolio' ? 'Portfolio orchestrator (always on)' : row.enabled ? (row.hasThread ? 'Enabled' : 'Enabled, no thread yet') : 'Disabled');
+        setting.addButton(button => button
+          .setButtonText(row.hasThread ? 'Open' : row.kind === 'project' && !row.enabled ? 'Enable and open' : 'Create and open')
+          .onClick(async () => {
+            try { await model.openOrchestrator(row.id); await render(); } catch (error) { report(error); }
+          }));
+        if (row.canToggle) {
+          setting.addToggle(toggle => toggle
+            .setValue(row.enabled)
+            .onChange(async (value) => {
+              try { await model.setProjectEnabled(row.id, value); } catch (error) { report(error); }
+              await render();
+            }));
+        }
+      }
+    };
+    void render();
   }
 }
