@@ -6,7 +6,7 @@ import type { ClaudeThreadsApiV1 } from '../ClaudeThreadsApiTypes';
 it('a throwing controller.destroy() still disposes the wake-up delegate, and later steps still run', () => {
   const delegateDispose = vi.fn();
   const api = {
-    apiVersion: 1, generation: 'g', capabilities: ['orchestrators.wakeup.delegate'],
+    apiVersion: 1, generation: 'g', capabilities: ['orchestrators.ensure'],
     threads: { subscribe: () => ({ dispose() {} }), get: vi.fn() },
     orchestrators: { list: vi.fn(), dispatch: vi.fn(), delegateWakeup: () => ({ dispose: delegateDispose }) },
   } as unknown as ClaudeThreadsApiV1;

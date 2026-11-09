@@ -22,7 +22,7 @@ function setup(options: {
   const dispatch = vi.fn(options.dispatch ?? (async () => ({ runId: 'r' })));
   const subscriptionDispose = vi.fn();
   const api = {
-    apiVersion: 1, generation: 'g', capabilities: ['orchestrators.wakeup.delegate'],
+    apiVersion: 1, generation: 'g', capabilities: ['orchestrators.ensure'],
     threads: {
       subscribe: vi.fn((fn: typeof listener) => { listener = fn; return { dispose: subscriptionDispose }; }),
       get: vi.fn(async (id: string) => threads[id] ? { id, title: threads[id].title ?? '', projectId: threads[id].projectId, updatedAt: threads[id].updatedAt ?? 1_700_000_000_000, messages: [] } : null),

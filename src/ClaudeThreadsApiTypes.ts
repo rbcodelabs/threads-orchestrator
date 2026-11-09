@@ -19,11 +19,19 @@ export type PublicThreadEvent =
   | { readonly kind: 'run.failed'; readonly threadId: string; readonly runId: string; readonly error: PublicError; readonly at: number }
   | { readonly kind: 'thread.removed'; readonly threadId: string; readonly at: number };
 export interface Disposable { dispose(): void }
-/** threadId is '' for a DISABLED Project that has no orchestrator thread (core lists it with enabled:false); enabled Projects without a thread are absent. */
-export interface OrchestratorSnapshot { readonly id: string; readonly kind: 'portfolio' | 'project'; readonly threadId: string; readonly title: string; readonly projectId?: string; /** Absent on older cores; treat undefined as true. */ readonly enabled?: boolean }
+/** threadId is '' when the Project orchestrator is disabled or has no thread yet. */
+export interface OrchestratorSnapshot { readonly id: string; readonly kind: 'portfolio' | 'project'; readonly threadId: string; readonly title: string; readonly projectId?: string; readonly enabled: boolean }
 export interface DispatchInput extends SendInput { /** Queue the prompt if the orchestrator is busy instead of throwing THREAD_BUSY. */ readonly queueIfBusy?: boolean }
-export const WAKEUP_DELEGATE_CAPABILITY = 'orchestrators.wakeup.delegate';
-export interface WakeupDelegateOwner { readonly pluginId: string }
+export const ORCHESTRATORS_ENSURE_CAPABILITY = 'orchestrators.ensure';
+export const ORCHESTRATORS_SET_ENABLED_CAPABILITY = 'orchestrators.setEnabled';
+export const EXTENSIONS_REGISTER_SKILL_CAPABILITY = 'extensions.registerSkill';
+/**
+ * Agent Threads capabilities this plugin cannot work without. There is deliberately no fallback for an older
+ * Agent Threads: core and this plugin ship together, and the plugin's services stay off (with one warning) without them.
+ */
+export const REQUIRED_CORE_CAPABILITIES: readonly string[] = [ORCHESTRATORS_ENSURE_CAPABILITY, ORCHESTRATORS_SET_ENABLED_CAPABILITY, EXTENSIONS_REGISTER_SKILL_CAPABILITY];
+export interface PeerIdentity { readonly pluginId: string }
+export interface SkillContribution { readonly name: string; readonly description: string; /** SKILL.md body without frontmatter; core writes the frontmatter. */ readonly content: string }
 export interface AgentToolDefinition { readonly type: 'function'; readonly name: string; readonly description: string; readonly parameters: Readonly<Record<string, unknown>> }
 export interface AgentToolBundle { readonly tools: readonly AgentToolDefinition[]; execute(name: string, args: Record<string, unknown>): Promise<string> }
 export interface ClaudeThreadsApiV1 {
@@ -37,8 +45,12 @@ export interface ClaudeThreadsApiV1 {
   };
   readonly orchestrators: {
     list(): Promise<readonly OrchestratorSnapshot[]>; dispatch(target: { readonly id: string }, input: DispatchInput): Promise<{ readonly runId: string }>;
-    /** Optional (capability 'orchestrators.wakeup.delegate'): claim ownership of orchestrator wake-ups from core. Dispose to hand them back. */
-    delegateWakeup?(owner: WakeupDelegateOwner): Disposable;
+    /** Capability 'orchestrators.ensure'. id is 'portfolio' | 'project:<projectId>'. Idempotent create; re-enables a disabled Project. Does not open a view. */
+    ensure(target: { readonly id: string }): Promise<OrchestratorSnapshot>;
+    /** Capability 'orchestrators.setEnabled'. Project orchestrators only; the Portfolio cannot be disabled. Disabling keeps the thread. */
+    setEnabled(target: { readonly id: string }, enabled: boolean): Promise<OrchestratorSnapshot>;
   };
+  /** Capability 'extensions.registerSkill'. */
+  readonly extensions: { registerSkill(owner: PeerIdentity, spec: SkillContribution): Disposable };
   readonly agentTools: { createBundle(profile: 'voice-orchestration'): AgentToolBundle };
 }

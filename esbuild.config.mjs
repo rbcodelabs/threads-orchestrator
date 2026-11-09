@@ -93,6 +93,7 @@ const ctx = await esbuild.context({
     '@codemirror/tooltip',
     '@codemirror/view',
   ],
+  loader: { '.md': 'text' },
   format: 'cjs',
   target: 'es2020',
   platform: 'node',

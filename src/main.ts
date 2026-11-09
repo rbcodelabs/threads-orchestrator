@@ -12,7 +12,10 @@ import { LEGACY_ORCHESTRATOR_VOICE_VIEW_TYPE } from './PluginIdentity';
 import { installLegacyViewBridge } from './LegacyViewBridge';
 import { siblingPluginDataPath } from './PluginDataPath';
 import { readAdapterText } from './PluginDataReader';
-import { WakeupLifecycle } from './WakeupLifecycle';
+import { ServiceLifecycle } from './ServiceLifecycle';
+import { WakeupService } from './WakeupService';
+import { HeartbeatService, DEFAULT_HEARTBEAT_MINUTES } from './HeartbeatService';
+import { SkillService } from './SkillService';
 import { runAllSafely } from './SafeTeardown';
 
 export default class ThreadsOrchestratorPlugin extends Plugin {
@@ -21,7 +24,9 @@ export default class ThreadsOrchestratorPlugin extends Plugin {
   threadsApi!: ClaudeThreadsApiClient;
   wakeDetectorSuspended = false;
   private legacyViewBridgeRegistered = false;
-  private wakeupLifecycle: WakeupLifecycle | null = null;
+  private wakeupLifecycle: ServiceLifecycle | null = null;
+  private heartbeatLifecycle: ServiceLifecycle | null = null;
+  private skillLifecycle: ServiceLifecycle | null = null;
 
   // Status bar UI elements
   private statusBarItem!: HTMLElement;
@@ -42,18 +47,32 @@ export default class ThreadsOrchestratorPlugin extends Plugin {
     });
     this.register(unsubscribeThreadsApi);
 
-    // Claim orchestrator wake-ups from Claude Threads when it supports delegation
-    // and the setting is on. WakeupLifecycle re-syncs itself on API generation changes.
-    this.wakeupLifecycle = new WakeupLifecycle({
-      client: this.threadsApi,
-      pluginId: this.manifest.id,
+    // Orchestration now lives in this plugin. Each service runs against the current
+    // Agent Threads API generation and requires the new core capabilities (no fallback).
+    const warn = (message: string) => console.warn(`[Threads Orchestrator] ${message}`);
+    this.wakeupLifecycle = new ServiceLifecycle({
+      client: this.threadsApi, label: 'orchestrator wake-up service', onWarn: warn,
       isEnabled: () => this.settings.wakeOrchestratorsOnActivity !== false,
-      onWarn: message => console.warn(`[Threads Orchestrator] ${message}`),
-      onError: error => console.error('[Threads Orchestrator] Orchestrator wake-up failed:', error),
+      createService: api => new WakeupService(api, { onWarn: warn, onError: error => console.error('[Threads Orchestrator] Orchestrator wake-up failed:', error) }),
     });
+    this.heartbeatLifecycle = new ServiceLifecycle({
+      client: this.threadsApi, label: 'orchestrator heartbeat', onWarn: warn,
+      isEnabled: () => this.settings.heartbeatEnabled !== false,
+      createService: api => new HeartbeatService(api, {
+        intervalMs: this.heartbeatIntervalMs(), onWarn: warn,
+        onError: error => console.error('[Threads Orchestrator] Orchestrator heartbeat failed:', error),
+      }),
+    });
+    this.skillLifecycle = new ServiceLifecycle({
+      client: this.threadsApi, label: 'thread-orchestrator skill registration', onWarn: warn,
+      isEnabled: () => true,
+      createService: api => new SkillService(api, { pluginId: this.manifest.id }),
+    });
+    this.skillLifecycle.start();
     this.wakeupLifecycle.start();
-    // Idempotent safety net: the delegate must be released even if a later unload step throws.
-    this.register(() => this.wakeupLifecycle?.dispose());
+    this.heartbeatLifecycle.start();
+    // Idempotent safety net: services must stop even if a later unload step throws.
+    this.register(() => this.disposeOrchestration());
     this.controller.startTrackingActiveFile();
 
     // Start wake word detector once the workspace is fully ready.
@@ -144,9 +163,9 @@ export default class ThreadsOrchestratorPlugin extends Plugin {
   }
 
   async onunload() {
-    // Wake-up lifecycle first: core cannot see a peer unload, so a leaked delegate keeps its wake-ups suppressed.
+    // Orchestration services first: the skill registration and timers must not outlive the plugin.
     runAllSafely([
-      () => { this.wakeupLifecycle?.dispose(); this.wakeupLifecycle = null; },
+      () => this.disposeOrchestration(),
       () => this.controller.destroy(),
       () => this.threadsApi.dispose(),
       // Detach all Voice panel leaves on unload so Obsidian doesn't keep a
@@ -164,6 +183,24 @@ export default class ThreadsOrchestratorPlugin extends Plugin {
   /** Called from the settings tab when wakeOrchestratorsOnActivity changes. */
   applyWakeupSetting(): void {
     this.wakeupLifecycle?.sync();
+  }
+
+  /** Called from the settings tab when the heartbeat toggle or interval changes. */
+  applyHeartbeatSetting(): void {
+    this.heartbeatLifecycle?.restart();
+  }
+
+  private heartbeatIntervalMs(): number {
+    const minutes = this.settings.heartbeatIntervalMinutes;
+    return (Number.isFinite(minutes) && minutes >= 5 ? Math.min(1440, minutes) : DEFAULT_HEARTBEAT_MINUTES) * 60_000;
+  }
+
+  private disposeOrchestration(): void {
+    runAllSafely([
+      () => { this.heartbeatLifecycle?.dispose(); this.heartbeatLifecycle = null; },
+      () => { this.wakeupLifecycle?.dispose(); this.wakeupLifecycle = null; },
+      () => { this.skillLifecycle?.dispose(); this.skillLifecycle = null; },
+    ], error => console.error('[Threads Orchestrator] orchestration teardown failed:', error));
   }
 
   suspendWakeDetector(): void {
