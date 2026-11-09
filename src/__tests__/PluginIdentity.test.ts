@@ -7,7 +7,7 @@ describe('Threads Orchestrator package identity', () => {
     const manifest = JSON.parse(readFileSync(resolve('manifest.json'), 'utf8'));
     const pkg = JSON.parse(readFileSync(resolve('package.json'), 'utf8'));
     const versions = JSON.parse(readFileSync(resolve('versions.json'), 'utf8'));
-    expect(manifest).toMatchObject({ id: 'threads-orchestrator', name: 'Threads Orchestrator', version: '0.2.0' });
+    expect(manifest).toMatchObject({ id: 'threads-orchestrator', name: 'Threads Orchestrator', version: '0.3.0' });
     expect(manifest.description.toLowerCase()).toContain('voice');
     expect(pkg).toMatchObject({ name: 'threads-orchestrator', version: manifest.version });
     expect(versions[manifest.version]).toBe(manifest.minAppVersion);

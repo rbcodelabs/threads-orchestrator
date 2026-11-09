@@ -36,7 +36,7 @@ Coordinate documents and Claude agents through a voice-first interface. Threads 
 - An [OpenAI API key](https://platform.openai.com/api-keys) with Realtime API access
 - Obsidian 1.11.4 or later, or compatible desktop Geode (verified with Geode 0.22.7). Geode advertises Obsidian API compatibility level 1.10.2; this is not its app version. Required secret-storage APIs are checked at startup.
 - Context files use inline suggestions in Obsidian and an “Add context file…” search modal in Geode.
-- Agent Threads v0.33.0 or later for agent execution (document-only voice remains available when Threads is absent)
+- Agent Threads v0.72.0 or later (orchestrator wake-ups, heartbeat and skill need its `orchestrators.ensure`, `orchestrators.setEnabled` and `extensions.registerSkill`; document-only voice remains available when Threads is absent)
 
 ## Installation
 
