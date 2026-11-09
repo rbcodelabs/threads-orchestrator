@@ -20,7 +20,7 @@ function setup(list: OrchestratorSnapshot[] | (() => Promise<OrchestratorSnapsho
     clearIntervalFn: h => { cleared.push(h); tick = null; },
   });
   const fire = async () => { tick?.(); await new Promise(r => setTimeout(r, 0)); await new Promise(r => setTimeout(r, 0)); };
-  return { service, api, dispatch: dispatchFn, fire, cleared, intervals, onError, onWarn, hasTimer: () => tick !== null };
+  return { service, api, dispatch: dispatchFn, fire, cleared, intervals, onError, onWarn, hasTimer: () => tick !== null, trigger: () => { tick?.(); } };
 }
 
 describe('HeartbeatService', () => {
@@ -108,13 +108,13 @@ describe('HeartbeatService', () => {
       let releaseHung!: (v: OrchestratorSnapshot[]) => void;
       const t = setup(() => hang ? new Promise<OrchestratorSnapshot[]>(r => { releaseHung = r; }) : Promise.resolve([portfolio]), undefined, 3_600_000, 120_000);
       t.service.start();
-      await t.fire();
+      t.trigger();
       await vi.advanceTimersByTimeAsync(119_000);
       expect(t.onWarn).not.toHaveBeenCalled();
       await vi.advanceTimersByTimeAsync(2_000);
       expect(t.onWarn).toHaveBeenCalledTimes(1);
       hang = false;
-      await t.fire();
+      t.trigger();
       await vi.advanceTimersByTimeAsync(0);
       expect(t.dispatch).toHaveBeenCalledTimes(1);
       releaseHung([portfolio, projA]);
