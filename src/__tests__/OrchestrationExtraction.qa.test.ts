@@ -202,3 +202,28 @@ describe('QA: settings defaults', () => {
     expect(defaults).toMatch(/heartbeatIntervalMinutes: 60/);
   });
 });
+
+// QA FINDING (observed in the real-app run, scenario W): on a vault with no Portfolio orchestrator, the first thread
+// that finishes makes WakeupService dispatch to {id:'portfolio'}; core's dispatch resolution then CREATES the Portfolio
+// orchestrator thread and starts a turn on it. Released core only woke an orchestrator that already existed
+// (resolveTarget('portfolio') returned settings.orchestratorThreadId, undefined => no ping), and HeartbeatService
+// documents "never creates an orchestrator". Wake-up must follow the same rule for the Portfolio.
+import { WakeupService } from '../WakeupService';
+describe('QA: wake-up must not create a Portfolio orchestrator that does not exist (parity with released core and with the heartbeat)', () => {
+  it('a plain thread finishing while list() has no Portfolio orchestrator dispatches nothing', async () => {
+    let listener!: (e: unknown) => void;
+    const timers: Array<() => void> = [];
+    const dispatch = vi.fn(async () => ({ runId: 'r' }));
+    const api = {
+      threads: { subscribe: vi.fn((fn: typeof listener) => { listener = fn; return { dispose: vi.fn() }; }), get: vi.fn(async (id: string) => ({ id, title: 'Worker', updatedAt: 1, messages: [] })) },
+      orchestrators: { list: vi.fn(async () => []), dispatch },
+    } as unknown as ClaudeThreadsApiV1;
+    const svc = new WakeupService(api, { setTimeoutFn: cb => { timers.push(cb); return cb; }, clearTimeoutFn: () => undefined });
+    svc.start();
+    listener({ kind: 'run.completed', threadId: 'w1', runId: 'r', at: 1 });
+    for (let i = 0; i < 30; i++) await Promise.resolve();
+    timers.splice(0).forEach(cb => cb());
+    for (let i = 0; i < 30; i++) await Promise.resolve();
+    expect(dispatch, 'core would auto-create the Portfolio orchestrator and start a Claude turn on it').not.toHaveBeenCalled();
+  });
+});
