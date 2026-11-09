@@ -14,7 +14,7 @@ import { siblingPluginDataPath } from './PluginDataPath';
 import { readAdapterText } from './PluginDataReader';
 import { ServiceLifecycle } from './ServiceLifecycle';
 import { WakeupService } from './WakeupService';
-import { HeartbeatService, DEFAULT_HEARTBEAT_MINUTES } from './HeartbeatService';
+import { HeartbeatService, heartbeatIntervalMs } from './HeartbeatService';
 import { SkillService } from './SkillService';
 import { runAllSafely } from './SafeTeardown';
 
@@ -49,22 +49,23 @@ export default class ThreadsOrchestratorPlugin extends Plugin {
 
     // Orchestration now lives in this plugin. Each service runs against the current
     // Agent Threads API generation and requires the new core capabilities (no fallback).
+    const warnOnce = { generation: null as string | null };
     const warn = (message: string) => console.warn(`[Threads Orchestrator] ${message}`);
     this.wakeupLifecycle = new ServiceLifecycle({
-      client: this.threadsApi, label: 'orchestrator wake-up service', onWarn: warn,
+      client: this.threadsApi, label: 'orchestrator wake-up service', onWarn: warn, warnOnce,
       isEnabled: () => this.settings.wakeOrchestratorsOnActivity !== false,
       createService: api => new WakeupService(api, { onWarn: warn, onError: error => console.error('[Threads Orchestrator] Orchestrator wake-up failed:', error) }),
     });
     this.heartbeatLifecycle = new ServiceLifecycle({
-      client: this.threadsApi, label: 'orchestrator heartbeat', onWarn: warn,
+      client: this.threadsApi, label: 'orchestrator heartbeat', onWarn: warn, warnOnce,
       isEnabled: () => this.settings.heartbeatEnabled !== false,
       createService: api => new HeartbeatService(api, {
-        intervalMs: this.heartbeatIntervalMs(), onWarn: warn,
+        intervalMs: heartbeatIntervalMs(this.settings.heartbeatIntervalMinutes), onWarn: warn,
         onError: error => console.error('[Threads Orchestrator] Orchestrator heartbeat failed:', error),
       }),
     });
     this.skillLifecycle = new ServiceLifecycle({
-      client: this.threadsApi, label: 'thread-orchestrator skill registration', onWarn: warn,
+      client: this.threadsApi, label: 'thread-orchestrator skill registration', onWarn: warn, warnOnce,
       isEnabled: () => true,
       createService: api => new SkillService(api, { pluginId: this.manifest.id }),
     });
@@ -188,11 +189,6 @@ export default class ThreadsOrchestratorPlugin extends Plugin {
   /** Called from the settings tab when the heartbeat toggle or interval changes. */
   applyHeartbeatSetting(): void {
     this.heartbeatLifecycle?.restart();
-  }
-
-  private heartbeatIntervalMs(): number {
-    const minutes = this.settings.heartbeatIntervalMinutes;
-    return (Number.isFinite(minutes) && minutes >= 5 ? Math.min(1440, minutes) : DEFAULT_HEARTBEAT_MINUTES) * 60_000;
   }
 
   private disposeOrchestration(): void {

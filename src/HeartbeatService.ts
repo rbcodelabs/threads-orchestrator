@@ -14,9 +14,20 @@ import type { ClaudeThreadsApiV1 } from './ClaudeThreadsApiTypes';
 export const PORTFOLIO_HEARTBEAT_PROMPT = 'Heartbeat: reconcile activity missed by targeted event reviews across all threads. Do not reopen concluded work whose updatedAt is unchanged.';
 export const PROJECT_HEARTBEAT_PROMPT = 'Heartbeat: reconcile Project activity missed by targeted event reviews. Do not reopen concluded work whose updatedAt is unchanged.';
 export const DEFAULT_HEARTBEAT_MINUTES = 60;
+export const MIN_HEARTBEAT_MINUTES = 5;
+export const MAX_HEARTBEAT_MINUTES = 1440;
+const DEFAULT_TICK_TIMEOUT_MS = 120_000;
+
+/** Non-numbers fall back to the default; out-of-range values clamp (below 5 -> 5, above 1440 -> 1440). */
+export function heartbeatIntervalMs(minutes: unknown): number {
+  const m = typeof minutes === 'number' && Number.isFinite(minutes) ? minutes : DEFAULT_HEARTBEAT_MINUTES;
+  return Math.min(MAX_HEARTBEAT_MINUTES, Math.max(MIN_HEARTBEAT_MINUTES, m)) * 60_000;
+}
 
 export interface HeartbeatOptions {
   intervalMs: number;
+  /** A tick running longer than this is abandoned so one hung call cannot stall later ticks. Default 2 minutes. */
+  tickTimeoutMs?: number;
   setIntervalFn?: (cb: () => void, ms: number) => unknown;
   clearIntervalFn?: (handle: unknown) => void;
   onWarn?: (message: string) => void;
@@ -27,6 +38,7 @@ export class HeartbeatService {
   private handle: unknown = null;
   private running = false;
   private inFlight = false;
+  private tickSeq = 0;
   /** Bumped on stop() so an in-flight tick never dispatches afterwards. */
   private epoch = 0;
 
@@ -52,22 +64,31 @@ export class HeartbeatService {
     if (this.inFlight || !this.running) return;
     this.inFlight = true;
     const epoch = this.epoch;
+    const tickId = ++this.tickSeq;
+    const isCurrent = () => epoch === this.epoch && tickId === this.tickSeq;
+    const watchdog = setTimeout(() => {
+      if (tickId !== this.tickSeq) return;
+      this.tickSeq++; // invalidates the hung tick: it can dispatch nothing more
+      this.inFlight = false;
+      this.options.onWarn?.('Orchestrator heartbeat tick timed out and was abandoned');
+    }, this.options.tickTimeoutMs ?? DEFAULT_TICK_TIMEOUT_MS);
     try {
       const orchestrators = await this.api.orchestrators.list();
       for (const o of orchestrators) {
-        if (epoch !== this.epoch) return;
+        if (!isCurrent()) return;
         if (!o.threadId || o.enabled === false) continue;
         const prompt = o.kind === 'portfolio' ? PORTFOLIO_HEARTBEAT_PROMPT : PROJECT_HEARTBEAT_PROMPT;
         try {
           await this.api.orchestrators.dispatch({ id: o.id }, { prompt, queueIfBusy: true });
         } catch (error) {
-          if (epoch === this.epoch) this.options.onError?.(error);
+          if (isCurrent()) this.options.onError?.(error);
         }
       }
     } catch (error) {
-      if (epoch === this.epoch) this.options.onError?.(error);
+      if (isCurrent()) this.options.onError?.(error);
     } finally {
-      this.inFlight = false;
+      clearTimeout(watchdog);
+      if (tickId === this.tickSeq) this.inFlight = false;
     }
   }
 }

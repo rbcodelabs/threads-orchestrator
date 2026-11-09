@@ -15,6 +15,8 @@ export interface ServiceLifecycleOptions {
   isEnabled: () => boolean;
   createService: (api: ClaudeThreadsApiV1) => ServiceLike;
   onWarn?: (message: string) => void;
+  /** Shared between lifecycles so the missing-capability warning is logged once per API generation, not once per service. */
+  warnOnce?: { generation: string | null };
 }
 
 /**
@@ -26,10 +28,10 @@ export interface ServiceLifecycleOptions {
 export class ServiceLifecycle {
   private active: { api: ClaudeThreadsApiV1; service: ServiceLike } | null = null;
   private unsubscribe: (() => void) | null = null;
-  private warnedGeneration: string | null = null;
+  private readonly warned: { generation: string | null };
   private disposed = false;
 
-  constructor(private readonly options: ServiceLifecycleOptions) {}
+  constructor(private readonly options: ServiceLifecycleOptions) { this.warned = options.warnOnce ?? { generation: null }; }
 
   start(): void {
     if (this.unsubscribe || this.disposed) return;
@@ -44,8 +46,8 @@ export class ServiceLifecycle {
     const missing = api ? REQUIRED_CORE_CAPABILITIES.filter(c => !api.capabilities.includes(c)) : [];
     const wanted = !!api && missing.length === 0 && this.options.isEnabled();
     if (this.active && (!wanted || this.active.api !== api)) this.release();
-    if (api && missing.length > 0 && this.warnedGeneration !== api.generation) {
-      this.warnedGeneration = api.generation;
+    if (api && missing.length > 0 && this.warned.generation !== api.generation) {
+      this.warned.generation = api.generation;
       this.options.onWarn?.(`The ${this.options.label} is off: this Agent Threads version lacks required capabilities (${missing.join(', ')}). Update Agent Threads.`);
     }
     if (!wanted || !api || this.active) return;
@@ -78,6 +80,11 @@ export class ServiceLifecycle {
   private release(): void {
     const active = this.active;
     this.active = null;
-    active?.service.stop();
+    try {
+      active?.service.stop();
+    } catch (error) {
+      // A torn-down old core must not stop a new generation from starting.
+      this.options.onWarn?.(`Could not stop the ${this.options.label}: ${error instanceof Error ? error.message : String(error)}`);
+    }
   }
 }

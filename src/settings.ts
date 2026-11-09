@@ -435,15 +435,19 @@ export class ThreadsOrchestratorSettingTab extends PluginSettingTab {
       .setName('Heartbeat interval (minutes)')
       .setDesc('Minutes between heartbeats. Minimum 5, maximum 1440. Default 60.')
       .addText(text => {
-        text
-          .setPlaceholder('60')
-          .setValue(String(this.plugin.settings.heartbeatIntervalMinutes))
-          .onChange(async (value) => {
-            const n = parseInt(value, 10);
-            this.plugin.settings.heartbeatIntervalMinutes = isNaN(n) ? 60 : Math.min(1440, Math.max(5, n));
-            await this.plugin.saveSettings();
-            this.plugin.applyHeartbeatSetting();
-          });
+        // Commit on blur/Enter (not per keystroke) and show the clamped value.
+        const commit = async () => {
+          const n = parseInt(text.getValue(), 10);
+          const clamped = Math.min(1440, Math.max(5, isNaN(n) ? 60 : n));
+          text.setValue(String(clamped));
+          if (clamped === this.plugin.settings.heartbeatIntervalMinutes) return;
+          this.plugin.settings.heartbeatIntervalMinutes = clamped;
+          await this.plugin.saveSettings();
+          this.plugin.applyHeartbeatSetting();
+        };
+        text.setPlaceholder('60').setValue(String(this.plugin.settings.heartbeatIntervalMinutes));
+        text.inputEl.addEventListener('blur', () => { void commit(); });
+        text.inputEl.addEventListener('keydown', (e: KeyboardEvent) => { if (e.key === 'Enter') void commit(); });
         text.inputEl.type = 'number';
         text.inputEl.min = '5';
         text.inputEl.max = '1440';
@@ -487,7 +491,7 @@ export class ThreadsOrchestratorSettingTab extends PluginSettingTab {
           .setName(row.title)
           .setDesc(row.kind === 'portfolio' ? 'Portfolio orchestrator (always on)' : row.enabled ? (row.hasThread ? 'Enabled' : 'Enabled, no thread yet') : 'Disabled');
         setting.addButton(button => button
-          .setButtonText(row.hasThread ? 'Open' : 'Create and open')
+          .setButtonText(row.hasThread ? 'Open' : row.kind === 'project' && !row.enabled ? 'Enable and open' : 'Create and open')
           .onClick(async () => {
             try { await model.openOrchestrator(row.id); await render(); } catch (error) { report(error); }
           }));
