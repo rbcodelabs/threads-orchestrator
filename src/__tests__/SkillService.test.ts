@@ -31,6 +31,20 @@ describe('bundled thread-orchestrator skill', () => {
   });
 });
 
+describe('thread-link convention (producer side of the Agent Threads dock thread links)', () => {
+  const body = THREAD_ORCHESTRATOR_SKILL.content;
+
+  it('tells the orchestrator to link threads it names to the user as [[thread:<id>|Title]]', () => {
+    expect(body).toContain('[[thread:<id>|Title]]');
+  });
+
+  it('says to use the real id from the tools and never invent one', () => {
+    const section = body.slice(body.indexOf('[[thread:<id>|Title]]') - 600, body.indexOf('[[thread:<id>|Title]]') + 900);
+    expect(section).toMatch(/real (thread )?`?id/i);
+    expect(section).toMatch(/never invent/i);
+  });
+});
+
 describe('SkillService', () => {
   it('registers the skill under this plugin id on start and disposes it on stop', () => {
     const { api, registerSkill, dispose } = setup();
