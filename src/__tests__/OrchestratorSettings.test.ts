@@ -24,6 +24,18 @@ describe('OrchestratorSettingsModel', () => {
     ]);
   });
 
+  it('always shows a Portfolio row (no thread) when list() does not include one', async () => {
+    const { model } = setup([on]);
+    expect((await model.rows())![0]).toEqual({ id: 'portfolio', kind: 'portfolio', title: 'Portfolio Orchestrator', enabled: true, canToggle: false, hasThread: false });
+  });
+
+  it('open refuses to open an empty thread id', async () => {
+    const { model, ensure, open } = setup();
+    ensure.mockResolvedValueOnce({ id: 'project:b', kind: 'project', threadId: '', title: 'B', enabled: true } as OrchestratorSnapshot);
+    await expect(model.openOrchestrator('project:b')).rejects.toThrow(/no thread/);
+    expect(open).not.toHaveBeenCalled();
+  });
+
   it('returns null rows when the API is unavailable', async () => {
     expect(await new OrchestratorSettingsModel({ current: () => null }).rows()).toBeNull();
   });

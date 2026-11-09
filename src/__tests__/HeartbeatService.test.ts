@@ -7,7 +7,7 @@ const projA = { id: 'project:a', kind: 'project', projectId: 'a', threadId: 'ta'
 const projB = { id: 'project:b', kind: 'project', projectId: 'b', threadId: '', title: 'B', enabled: false } as OrchestratorSnapshot;
 const projNoFlag = { id: 'project:c', kind: 'project', projectId: 'c', threadId: 'tc', title: 'C' } as OrchestratorSnapshot;
 
-function setup(list: OrchestratorSnapshot[] | (() => Promise<OrchestratorSnapshot[]>), dispatch?: (t: { id: string }, i: unknown) => Promise<{ runId: string }>, intervalMs = 3_600_000) {
+function setup(list: OrchestratorSnapshot[] | (() => Promise<OrchestratorSnapshot[]>), dispatch?: (t: { id: string }, i: unknown) => Promise<{ runId: string }>, intervalMs = 3_600_000, tickTimeoutMs?: number) {
   const dispatchFn = vi.fn(dispatch ?? (async () => ({ runId: 'r' })));
   const api = { orchestrators: { list: vi.fn(typeof list === 'function' ? list : async () => list), dispatch: dispatchFn } } as unknown as ClaudeThreadsApiV1;
   let tick: (() => void) | null = null;
@@ -15,7 +15,7 @@ function setup(list: OrchestratorSnapshot[] | (() => Promise<OrchestratorSnapsho
   const intervals: number[] = [];
   const onError = vi.fn(); const onWarn = vi.fn();
   const service = new HeartbeatService(api, {
-    intervalMs, onError, onWarn,
+    intervalMs, onError, onWarn, tickTimeoutMs,
     setIntervalFn: (cb, ms) => { tick = cb; intervals.push(ms); return 'handle'; },
     clearIntervalFn: h => { cleared.push(h); tick = null; },
   });
@@ -99,5 +99,42 @@ describe('HeartbeatService', () => {
     await new Promise(r => setTimeout(r, 0));
     expect(t.dispatch).not.toHaveBeenCalled();
     expect(() => t.service.stop()).not.toThrow();
+  });
+
+  it('a hung tick is abandoned after the per-tick timeout so later ticks run, and the hung tick dispatches nothing more', async () => {
+    vi.useFakeTimers();
+    try {
+      let hang = true;
+      let releaseHung!: (v: OrchestratorSnapshot[]) => void;
+      const t = setup(() => hang ? new Promise<OrchestratorSnapshot[]>(r => { releaseHung = r; }) : Promise.resolve([portfolio]), undefined, 3_600_000, 120_000);
+      t.service.start();
+      await t.fire();
+      await vi.advanceTimersByTimeAsync(119_000);
+      expect(t.onWarn).not.toHaveBeenCalled();
+      await vi.advanceTimersByTimeAsync(2_000);
+      expect(t.onWarn).toHaveBeenCalledTimes(1);
+      hang = false;
+      await t.fire();
+      await vi.advanceTimersByTimeAsync(0);
+      expect(t.dispatch).toHaveBeenCalledTimes(1);
+      releaseHung([portfolio, projA]);
+      await vi.advanceTimersByTimeAsync(0);
+      expect(t.dispatch).toHaveBeenCalledTimes(1);
+    } finally { vi.useRealTimers(); }
+  });
+
+  it('a restart (stop + new service) during an in-flight tick lets the old service dispatch nothing further', async () => {
+    let release!: (v: OrchestratorSnapshot[]) => void;
+    const old = setup(() => new Promise<OrchestratorSnapshot[]>(r => { release = r; }));
+    old.service.start();
+    await old.fire();
+    old.service.stop();
+    const fresh = setup([portfolio]);
+    fresh.service.start();
+    release([portfolio, projA]);
+    await new Promise(r => setTimeout(r, 0));
+    expect(old.dispatch).not.toHaveBeenCalled();
+    await fresh.fire();
+    expect(fresh.dispatch).toHaveBeenCalledTimes(1);
   });
 });

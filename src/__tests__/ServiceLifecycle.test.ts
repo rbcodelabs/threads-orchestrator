@@ -114,6 +114,28 @@ describe('ServiceLifecycle', () => {
     expect(order).toEqual(['start:g1', 'stop:g1', 'start:g2']);
   });
 
+  it('a throwing stop() on the old generation is warned about and the new generation still starts', () => {
+    const onWarn = vi.fn();
+    const started: string[] = [];
+    const client = makeClient(makeApi(undefined, 'g1').api);
+    const lifecycle = new ServiceLifecycle({
+      client, label: 'x', isEnabled: () => true, onWarn,
+      createService: api => ({ start: () => { started.push(api.generation); }, stop: () => { if (api.generation === 'g1') throw new Error('torn down'); } }),
+    });
+    lifecycle.start();
+    expect(() => client.set(makeApi(undefined, 'g2').api)).not.toThrow();
+    expect(started).toEqual(['g1', 'g2']);
+    expect(onWarn).toHaveBeenCalledWith(expect.stringContaining('torn down'));
+  });
+
+  it('lifecycles sharing a warn-once guard log the missing-capability warning once per generation', () => {
+    const onWarn = vi.fn();
+    const api = makeApi([]).api;
+    const shared = { generation: null as string | null };
+    for (let i = 0; i < 3; i++) new ServiceLifecycle({ client: makeClient(api), label: 'x' + i, isEnabled: () => true, onWarn, warnOnce: shared, createService: () => ({ start() {}, stop() {} }) }).start();
+    expect(onWarn).toHaveBeenCalledTimes(1);
+  });
+
   it('dispose stops the service, unsubscribes, and later start/sync/dispose are no-ops', () => {
     const client = makeClient(makeApi().api);
     const { lifecycle, services } = setup(client);
