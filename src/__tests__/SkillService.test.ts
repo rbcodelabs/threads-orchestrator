@@ -40,7 +40,8 @@ describe('thread-link convention (producer side of the Agent Threads dock thread
     expect(start, `missing heading ${HEADING}`).toBeGreaterThanOrEqual(0);
     const rest = body.slice(start + HEADING.length);
     const next = rest.search(/\n## /);
-    return next === -1 ? rest : rest.slice(0, next);
+    // Markdown is hard-wrapped: compare on single-spaced text.
+    return (next === -1 ? rest : rest.slice(0, next)).replace(/\s+/g, ' ');
   }
 
   it('documents the [[thread:<id>|Title]] marker with the exact id field the tools return', () => {

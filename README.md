@@ -22,6 +22,7 @@ Coordinate documents and Claude agents through a voice-first interface. Threads 
   - *Orchestrator heartbeat* (default on, every 60 minutes, configurable 5-1440; stored values outside the range are clamped, so below 5 becomes 5; first fires one interval after load, not at startup): asks the Portfolio orchestrator and each enabled Project orchestrator to reconcile missed activity, queued if busy. It never creates an orchestrator that does not exist yet. This is a timer by design: it is the time-based backstop for missed events.
   - A list of orchestrators: open one (creating it if needed) and enable/disable Project orchestrators. The Portfolio orchestrator cannot be disabled.
   - The `thread-orchestrator` skill ships inside this plugin and is registered with Agent Threads on load (and removed on unload).
+  - In conversation with you the orchestrator names threads as `[[thread:<id>|Title]]`. New Agent Threads builds render these as links (hover highlights the card on the Agent Board, click opens the thread); older builds show the marker as literal text. The plugin and Agent Threads core versions can skew independently, so either may be the newer one.
   - Known limits:
     - Wake-ups are sent with queueIfBusy. If Agent Threads still reports THREAD_BUSY, the batch is retried when the orchestrator next completes a run, at most 3 times, then dropped (the heartbeat is the backstop).
     - A batch still waiting out its 12 s debounce is discarded when the plugin unloads or the toggle is turned off; the heartbeat covers it.

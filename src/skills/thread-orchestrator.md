@@ -99,8 +99,8 @@ orchestration:
    passes" is sufficient and must not trigger a redundant interview.
 4. If a material ambiguity remains, record `awaiting-user` and ask Rick one
    focused question in this Project Orchestrator conversation. Prefer:
-   "What outcome do you want from ‘<thread title>,’ and what would make you
-   consider it complete?" Ask another question only when the answer leaves a
+   "What outcome do you want from [[thread:<id>|<thread title>]], and what
+   would make you consider it complete?" Ask another question only when the answer leaves a
    material ambiguity.
 5. Do not stage or create execution, inspection, or verification proposals
    until a sufficient goal exists. Do not repeat an unanswered interview
@@ -196,11 +196,24 @@ message, answer Rick normally.
 
 ## Naming threads in replies to Rick
 
-When a reply to Rick refers to a specific thread, write it as a link,
-`[[thread:<id>|Title]]`: the thread's real `id` exactly as the tools returned it,
-and its plain title as the label (no markdown or brackets inside the label).
-Never invent or guess an id; if you do not have the id, write the plain title
-instead. The Agent Board's orchestrator chat turns these links into clickable
-names that highlight the card on the board. Do not put the marker in code
-blocks, manager notes or proposed replies to other threads; it is only for
-replies addressed to Rick.
+When you name a specific thread to Rick, write it as a link,
+`[[thread:<id>|Title]]`, for example `[[thread:abc-123|Deploy fix]]`.
+
+- The id is the `id` field that `threads_list` returned for that thread (the
+  same value other tools take as `threadId`). Never invent or guess an id, never
+  abbreviate or rename the id, and do not reuse an id from an older message or
+  note unless a tool returned it in this run. If you do not have the id, write
+  the plain title instead.
+- The label is the thread's title on one line, with any [, ], | or line breaks
+  in the title replaced by spaces. If a title is long, shorten only the label,
+  never the id.
+- Use the marker only in your own conversation messages to Rick (direct
+  answers, event/heartbeat summaries, goal questions). Keep thread titles and
+  ids as PLAIN TEXT in manager notes, proposed replies, threads_post_decision
+  fields (header, question, option descriptions), tool arguments and code
+  blocks, because `[[...]]` in persisted text becomes a dangling wikilink (and
+  those surfaces would show the marker as raw text).
+
+The Agent Board's orchestrator chat turns these links into clickable names that
+highlight the card on the board. Older Agent Threads builds show the marker as
+literal text, which is harmless.
