@@ -193,3 +193,14 @@ For an event ping or heartbeat, finish with a short factual summary of what was
 reviewed, which goal questions or proposals were staged, and how many threads
 were left untouched. When nothing changed, say so briefly. For a direct
 message, answer Rick normally.
+
+## Naming threads in replies to Rick
+
+When a reply to Rick refers to a specific thread, write it as a link,
+`[[thread:<id>|Title]]`: the thread's real `id` exactly as the tools returned it,
+and its plain title as the label (no markdown or brackets inside the label).
+Never invent or guess an id; if you do not have the id, write the plain title
+instead. The Agent Board's orchestrator chat turns these links into clickable
+names that highlight the card on the board. Do not put the marker in code
+blocks, manager notes or proposed replies to other threads; it is only for
+replies addressed to Rick.
