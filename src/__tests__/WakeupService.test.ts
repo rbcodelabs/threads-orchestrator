@@ -296,4 +296,27 @@ describe('WakeupService', () => {
     expect(t.dispatch.mock.calls.map(c => c[0].id)).toEqual(['project:p1', 'portfolio']);
     expect(t.dispatch.mock.calls[1][1].prompt).toBe('New activity in Project p1 — the Project orchestrator could not be reached.');
   });
+
+  it('the summary-only fallback also skips a Portfolio orchestrator that does not exist', async () => {
+    const t = setup({
+      orchestrators: [],
+      threads: { w: { title: 'Task', projectId: 'p1' } },
+      dispatch: async target => { if (target.id === 'project:p1') throw new Error('creation failed'); return { runId: 'r' }; },
+    });
+    t.emit({ kind: 'run.completed', threadId: 'w' });
+    await t.settle();
+    await t.fire();
+    expect(t.dispatch.mock.calls.map(c => c[0].id)).toEqual(['project:p1']);
+  });
+
+  it('a portfolio entry without a thread counts as not existing; with a thread the wake-up is sent', async () => {
+    const none = setup({ orchestrators: [{ ...portfolio, threadId: '' }], threads: { a: { title: 'A' } } });
+    none.emit({ kind: 'run.completed', threadId: 'a' });
+    await none.settle(); await none.fire();
+    expect(none.dispatch).not.toHaveBeenCalled();
+    const some = setup({ threads: { a: { title: 'A' } } });
+    some.emit({ kind: 'run.completed', threadId: 'a' });
+    await some.settle(); await some.fire();
+    expect(some.dispatch).toHaveBeenCalledTimes(1);
+  });
 });

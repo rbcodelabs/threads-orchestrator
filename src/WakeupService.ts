@@ -11,8 +11,12 @@
  * - a Project dispatch that fails falls back to a summary-only portfolio ping
  *   that exposes no Project thread details
  *
- * Core stops pinging when this plugin claims the delegate (see
- * WakeupLifecycle); this class never runs without that claim.
+ * Agent Threads core no longer wakes orchestrators; this is the only sender
+ * (started by ServiceLifecycle against a core with the required capabilities).
+ * Wake-ups go only to orchestrators that already exist: a Portfolio dispatch is
+ * skipped unless list() shows a Portfolio with a thread (core would otherwise
+ * create it and start an unrequested turn). Project orchestrators are still
+ * created by dispatch on their first completed thread.
  */
 import type { ClaudeThreadsApiV1, Disposable, OrchestratorSnapshot, PublicThreadEvent } from './ClaudeThreadsApiTypes';
 
@@ -158,6 +162,8 @@ export class WakeupService {
     }
     if (!isCurrent()) return;
 
+    if (bucket === PORTFOLIO && !(await this.portfolioExists())) return;
+    if (!isCurrent()) return;
     try {
       await this.api.orchestrators.dispatch({ id: bucket }, { prompt, queueIfBusy: true });
     } catch (error) {
@@ -188,6 +194,15 @@ export class WakeupService {
     }
   }
 
+  /** True only when the Portfolio orchestrator already has a thread. False (and quiet) on list failure. */
+  private async portfolioExists(): Promise<boolean> {
+    try {
+      return (await this.api.orchestrators.list()).some(o => o.kind === 'portfolio' && !!o.threadId);
+    } catch {
+      return false;
+    }
+  }
+
   private holdForRetry(bucket: string, entries: Map<string, Status>, retries: number): void {
     const maxRetries = this.options.maxBusyRetries ?? DEFAULT_MAX_BUSY_RETRIES;
     if (retries >= maxRetries) {
@@ -203,7 +218,7 @@ export class WakeupService {
   private async sendSummaryOnly(bucket: string, isCurrent: () => boolean): Promise<void> {
     const projectId = bucket.slice('project:'.length);
     try {
-      if (!isCurrent()) return;
+      if (!(await this.portfolioExists()) || !isCurrent()) return;
       await this.api.orchestrators.dispatch(
         { id: PORTFOLIO },
         { prompt: `New activity in Project ${projectId} — the Project orchestrator could not be reached.`, queueIfBusy: true },
