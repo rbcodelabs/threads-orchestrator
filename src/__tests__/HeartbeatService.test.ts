@@ -83,6 +83,7 @@ describe('HeartbeatService', () => {
     await t.fire();
     expect(t.dispatch).toHaveBeenCalledTimes(1);
     release();
+    await new Promise(r => setTimeout(r, 0));
     await t.fire();
     expect(t.dispatch).toHaveBeenCalledTimes(2);
   });
