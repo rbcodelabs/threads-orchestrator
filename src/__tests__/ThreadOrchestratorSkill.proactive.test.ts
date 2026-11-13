@@ -34,6 +34,11 @@ describe('thread-orchestrator skill: proactive waiting-on-Rick rules', () => {
     expect(body).toContain('Routine drafts, local edits, branch pushes, and ordinary replies are not irreversible');
   });
 
+  it('points Rick to Settings when orchestrator management is unavailable', () => {
+    expect(body).toContain('Orchestrator management is not available in this context');
+    expect(body).toContain('point Rick to Settings → Orchestrators');
+  });
+
   it('still forbids sending', () => {
     expect(body).toContain('**Never send.**');
     expect(body).toContain('You may never send a proposed reply yourself');
