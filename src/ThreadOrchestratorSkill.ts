@@ -5,8 +5,10 @@ import body from './skills/thread-orchestrator.md';
  * The thread-orchestrator skill, moved here from Agent Threads core. Name and
  * description are identical to core's former SKILL.md frontmatter so the
  * orchestrator threads discover it the same way (by description). The wake-up
- * and heartbeat prompts never name the skill, so a host-side namespacing of the
- * registered id cannot break them.
+ * and heartbeat prompts open with "First load the thread-orchestrator skill."
+ * (see orchestratorPrompts.ts) because listing the skill alone does not make an
+ * orchestrator load it; this body stays the single source of the detailed rules.
+ * If a host namespaces the registered id, update that instruction with it.
  */
 export const THREAD_ORCHESTRATOR_SKILL: SkillContribution = {
   name: 'thread-orchestrator',

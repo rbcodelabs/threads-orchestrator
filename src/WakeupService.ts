@@ -29,6 +29,7 @@
  * created by dispatch on their first completed thread.
  */
 import type { ClaudeThreadsApiV1, Disposable, OrchestratorSnapshot, PublicThreadEvent } from './ClaudeThreadsApiTypes';
+import { LOAD_SKILL_INSTRUCTION } from './orchestratorPrompts';
 
 export interface WakeupServiceOptions {
   /** ms to wait after the last completion before flushing a batch. Default 12000. */
@@ -271,7 +272,7 @@ export class WakeupService {
       if (!(await this.portfolioExists()) || !isCurrent()) return;
       await this.api.orchestrators.dispatch(
         { id: PORTFOLIO },
-        { prompt: `New activity in Project ${projectId} — the Project orchestrator could not be reached.`, queueIfBusy: true },
+        { prompt: `${LOAD_SKILL_INSTRUCTION} New activity in Project ${projectId} — the Project orchestrator could not be reached.`, queueIfBusy: true },
       );
     } catch (error) {
       this.options.onError?.(error);
@@ -287,7 +288,7 @@ export class WakeupService {
     }));
     const noun = entries.length === 1 ? 'thread' : 'threads';
     return [
-      `New activity on ${entries.length} ${noun}. Review only the named changed ${noun}; do not run a full reconciliation. The heartbeat handles missed activity.`,
+      `${LOAD_SKILL_INSTRUCTION} New activity on ${entries.length} ${noun}. Review only the named changed ${noun}; do not run a full reconciliation. The heartbeat handles missed activity.`,
       ...lines,
     ].join('\n');
   }
