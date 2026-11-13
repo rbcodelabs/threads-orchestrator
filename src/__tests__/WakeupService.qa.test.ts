@@ -96,14 +96,14 @@ describe('WakeupService QA: debounce and batching', () => {
     expect(t.cleared.length).toBe(1);
     await t.fire();
     expect(t.dispatch).toHaveBeenCalledTimes(1);
-    expect(t.dispatch.mock.calls[0][1].prompt).toMatch(/^New activity on 2 threads\. Review only the named changed threads;/);
+    expect(t.dispatch.mock.calls[0][1].prompt).toMatch(/^First load the thread-orchestrator skill\. New activity on 2 threads\. Review only the named changed threads;/);
   });
 
   it('pluralises for 3 threads and sends queueIfBusy:true', async () => {
     const t = setup({ threads: { a: {}, b: {}, c: {} } });
     for (const id of ['a', 'b', 'c']) t.emit('run.completed', id);
     await t.settle(); await t.fire();
-    expect(t.dispatch.mock.calls[0][1].prompt.split('\n')[0]).toBe('New activity on 3 threads. Review only the named changed threads; do not run a full reconciliation. The heartbeat handles missed activity.');
+    expect(t.dispatch.mock.calls[0][1].prompt.split('\n')[0]).toBe('First load the thread-orchestrator skill. New activity on 3 threads. Review only the named changed threads; do not run a full reconciliation. The heartbeat handles missed activity.');
     expect(t.dispatch.mock.calls[0][1].queueIfBusy).toBe(true);
   });
 
@@ -112,7 +112,7 @@ describe('WakeupService QA: debounce and batching', () => {
     t.emit('run.completed', 'a'); await t.settle();
     t.get.mockRejectedValue(new Error('gone'));
     await t.fire();
-    expect(t.dispatch.mock.calls[0][1].prompt).toBe('New activity on 1 thread. Review only the named changed thread; do not run a full reconciliation. The heartbeat handles missed activity.\n- a (done; updatedAt=unavailable)');
+    expect(t.dispatch.mock.calls[0][1].prompt).toBe('First load the thread-orchestrator skill. New activity on 1 thread. Review only the named changed thread; do not run a full reconciliation. The heartbeat handles missed activity.\n- a (done; updatedAt=unavailable)');
   });
 
   it('an event during an in-flight flush starts a new batch that is delivered separately', async () => {
@@ -168,7 +168,7 @@ describe('WakeupService QA: failure handling', () => {
     t.emit('run.completed', 'a'); t.emit('run.completed', 'b'); await t.settle();
     t.emit('run.completed', 'orch-portfolio'); await t.settle(); await t.fire();
     const last = t.dispatch.mock.calls.at(-1)![1].prompt;
-    expect(last).toContain('New activity on 2 threads');
+    expect(last).toContain('First load the thread-orchestrator skill. New activity on 2 threads');
     expect(last).toContain('- a "A" (done;');
     expect(last).not.toContain('(error;');
   });
@@ -273,7 +273,7 @@ describe('WakeupService QA: Project state re-check at flush (fix 71cdfb8)', () =
     t.state.orchestrators = [portfolio];
     await t.fire();
     expect(ids(t)).toEqual(['project:p1', 'portfolio']);
-    expect(t.dispatch.mock.calls[1][1].prompt).toBe('New activity in Project p1 — the Project orchestrator could not be reached.');
+    expect(t.dispatch.mock.calls[1][1].prompt).toBe('First load the thread-orchestrator skill. New activity in Project p1 — the Project orchestrator could not be reached.');
   });
 
   it('race: enabled at the first read, disabled at the second read after a generic dispatch failure -> dropped', async () => {
@@ -329,7 +329,7 @@ describe('WakeupService QA: Project state re-check at flush (fix 71cdfb8)', () =
     const t = setup({ ...proj, dispatch: async target => { if (target.id === 'project:p1') throw new Error('creation failed'); return { runId: 'r' }; } });
     t.emit('run.failed', 'w'); await t.settle(); await t.fire();
     expect(ids(t)).toEqual(['project:p1', 'portfolio']);
-    expect(t.dispatch.mock.calls[1][1].prompt).toBe('New activity in Project p1 — the Project orchestrator could not be reached.');
+    expect(t.dispatch.mock.calls[1][1].prompt).toBe('First load the thread-orchestrator skill. New activity in Project p1 — the Project orchestrator could not be reached.');
     expect(JSON.stringify(t.dispatch.mock.calls[1])).not.toContain('Secret');
   });
 
@@ -386,7 +386,7 @@ describe('WakeupService QA: Project state re-check at flush (fix 71cdfb8)', () =
   it('summary-only never contains Project thread details even when sent after the re-check', async () => {
     const t = setup({ ...proj, orchestrators: [portfolio, p1(true)], dispatch: async target => { if (target.id === 'project:p1') throw new Error('x'); return { runId: 'r' }; } });
     t.emit('run.failed', 'w'); await t.settle(); await t.fire();
-    expect(t.dispatch.mock.calls[1][1].prompt).toBe('New activity in Project p1 — the Project orchestrator could not be reached.');
+    expect(t.dispatch.mock.calls[1][1].prompt).toBe('First load the thread-orchestrator skill. New activity in Project p1 — the Project orchestrator could not be reached.');
   });
 });
 
@@ -435,8 +435,8 @@ describe('WakeupService QA round 2: thread-less disabled entries and summary-onl
     t.emit('run.completed', 'w1'); t.emit('run.completed', 'w2'); await t.settle(); await t.fire();
     const summaries = t.dispatch.mock.calls.filter(c => c[0].id === 'portfolio').map(c => c[1].prompt).sort();
     expect(summaries).toEqual([
-      'New activity in Project p1 — the Project orchestrator could not be reached.',
-      'New activity in Project p2 — the Project orchestrator could not be reached.',
+      'First load the thread-orchestrator skill. New activity in Project p1 — the Project orchestrator could not be reached.',
+      'First load the thread-orchestrator skill. New activity in Project p2 — the Project orchestrator could not be reached.',
     ]);
   });
 

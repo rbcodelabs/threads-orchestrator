@@ -75,7 +75,7 @@ ask which one rather than guessing.
 If `threads_list_orchestrators` or `threads_set_orchestrator_enabled` is not
 available (older Agent Threads), or a call returns "Orchestrator management is
 not available in this context", say so plainly and point Rick to Settings →
-Orchestrators. Do not retry or substitute other tools.
+Threads Orchestrator → Orchestrators. Do not retry or substitute other tools.
 
 ## Trigger-specific procedure
 
