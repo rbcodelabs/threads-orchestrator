@@ -25,6 +25,8 @@ export interface DispatchInput extends SendInput { /** Queue the prompt if the o
 export const ORCHESTRATORS_ENSURE_CAPABILITY = 'orchestrators.ensure';
 export const ORCHESTRATORS_SET_ENABLED_CAPABILITY = 'orchestrators.setEnabled';
 export const EXTENSIONS_REGISTER_SKILL_CAPABILITY = 'extensions.registerSkill';
+/** Optional: without it the project escalation tool stays off (one warning); the rest of the plugin is unaffected. */
+export const EXTENSIONS_REGISTER_AGENT_TOOL_CAPABILITY = 'extensions.registerAgentTool';
 /**
  * Agent Threads capabilities this plugin cannot work without. There is deliberately no fallback for an older
  * Agent Threads: core and this plugin ship together, and the plugin's services stay off (with one warning) without them.
@@ -32,6 +34,20 @@ export const EXTENSIONS_REGISTER_SKILL_CAPABILITY = 'extensions.registerSkill';
 export const REQUIRED_CORE_CAPABILITIES: readonly string[] = [ORCHESTRATORS_ENSURE_CAPABILITY, ORCHESTRATORS_SET_ENABLED_CAPABILITY, EXTENSIONS_REGISTER_SKILL_CAPABILITY];
 export interface PeerIdentity { readonly pluginId: string }
 export interface SkillContribution { readonly name: string; readonly description: string; /** SKILL.md body without frontmatter; core writes the frontmatter. */ readonly content: string }
+/** Mirrors core's AgentToolResult (src/AgentToolContributions.ts). */
+export interface AgentToolResult { readonly content: readonly { readonly type: 'text'; readonly text: string }[]; readonly isError?: boolean }
+/** Per-invocation capabilities core binds to the calling thread. This plugin uses none of them, so they are typed loosely. */
+export interface AgentToolHost { permissions(): Promise<unknown>; allocateStorage(artifactId: string, options?: Record<string, unknown>): Promise<unknown> }
+/** Mirrors core's AgentToolContribution. `inputSchema` is JSON Schema; `requiresApproval` defaults to true in core. */
+export interface AgentToolContribution {
+  readonly name: string; readonly description: string; readonly inputSchema: unknown;
+  readonly alwaysLoad?: boolean; readonly requiresApproval?: boolean;
+  invoke(threadId: string, args: Record<string, unknown>, host: AgentToolHost): Promise<AgentToolResult>;
+}
+/** Mirrors core's AgentToolRegistrationResult. A failed registration still carries a no-op dispose(). */
+export type AgentToolRegistrationResult =
+  | { readonly success: true; readonly status: 'registered'; readonly name: string; readonly dispose: () => void }
+  | { readonly success: false; readonly status: 'invalid' | 'conflict' | 'unavailable'; readonly name: string; readonly message: string; readonly dispose: () => void };
 export interface AgentToolDefinition { readonly type: 'function'; readonly name: string; readonly description: string; readonly parameters: Readonly<Record<string, unknown>> }
 export interface AgentToolBundle { readonly tools: readonly AgentToolDefinition[]; execute(name: string, args: Record<string, unknown>): Promise<string> }
 export interface ClaudeThreadsApiV1 {
@@ -51,6 +67,10 @@ export interface ClaudeThreadsApiV1 {
     setEnabled(target: { readonly id: string }, enabled: boolean): Promise<OrchestratorSnapshot>;
   };
   /** Capability 'extensions.registerSkill'. */
-  readonly extensions: { registerSkill(owner: PeerIdentity, spec: SkillContribution): Disposable };
+  readonly extensions: {
+    registerSkill(owner: PeerIdentity, spec: SkillContribution): Disposable;
+    /** Capability 'extensions.registerAgentTool'. Absent on an older core. Core binds the tool per thread (sessions built before registration do not get it). */
+    registerAgentTool?(owner: PeerIdentity, contribution: AgentToolContribution): AgentToolRegistrationResult;
+  };
   readonly agentTools: { createBundle(profile: 'voice-orchestration'): AgentToolBundle };
 }
