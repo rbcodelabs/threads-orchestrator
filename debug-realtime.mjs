@@ -28,7 +28,7 @@ if (fs.existsSync(envPath)) {
 }
 
 const API_KEY = process.env.OPENAI_API_KEY;
-const MODEL   = process.env.REALTIME_MODEL ?? 'gpt-realtime-2';
+const MODEL   = process.env.REALTIME_MODEL ?? 'gpt-realtime-2.1';
 const PROMPT  = process.argv[2] ?? 'Say exactly five words: one two three four five.';
 const VOICE   = 'alloy';
 
@@ -130,7 +130,7 @@ const ICONS = {
   'session.created':    '🟢',
   'session.updated':    '⚙️ ',
   'response.created':   '▶️ ',
-  // GA API event names (gpt-realtime-2)
+  // GA API event names (gpt-realtime-2.1)
   'response.output_audio.delta':              '🔊',
   'response.output_audio.done':               '🔇',
   'response.output_audio_transcript.delta':   '📝',

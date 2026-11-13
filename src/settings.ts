@@ -5,7 +5,7 @@ import { isWakeWordAvailable } from './WakeWordDetector';
 import { EnrollmentModal } from './EnrollmentModal';
 import { OrchestratorSettingsModel } from './OrchestratorSettingsModel';
 
-export const REALTIME_MODEL = 'gpt-realtime-2';
+export const REALTIME_MODEL = 'gpt-realtime-2.1';
 export const OPENAI_SECRET_ID = 'openai-api-key';
 
 export type RealtimeVoice =
