@@ -44,6 +44,32 @@ describe('thread-orchestrator skill: proactive waiting-on-Rick rules', () => {
     expect(body).toContain('it is for reads only');
   });
 
+  it('allows at most one pending item per thread: a decision or a staged reply, never both', () => {
+    expect(body).toContain('A thread holds **at most one** pending item for Rick');
+    expect(body).toContain('If `pendingDecisions` is non-empty, do not call `threads_set_proposed_reply` for that thread');
+    expect(body).toContain('call `threads_clear_proposed_reply` first, then post the decision');
+  });
+
+  it('reads proposedReply and pendingDecisions before staging or posting and trusts them over memory', () => {
+    expect(body).toContain('Before every `threads_set_proposed_reply` or `threads_post_decision` on a thread');
+    expect(body).toContain('That state is authoritative over anything you remember staging or posting');
+    expect(body).toContain('treat the pending state as unknown');
+  });
+
+  it('posts the decision first and relays only after the answer, then marks the notes answered', () => {
+    expect(body).toContain('post the decision and stage nothing in that turn');
+    expect(body).toContain('Only after Rick has answered it');
+    expect(body).toContain('`Staged: answered (decision <id>, relayed)`');
+  });
+
+  it('puts answer-independent preparation in option descriptions or the report, not a staged reply', () => {
+    expect(body).toContain("goes in the decision's option descriptions or in your report, not in a separate staged reply");
+  });
+
+  it('does not clear or post over a pending reply that another orchestrator owns', () => {
+    expect(body).toContain('A staged reply owned by another orchestrator is not yours to clear');
+  });
+
   it('still forbids sending', () => {
     expect(body).toContain('**Never send.**');
     expect(body).toContain('You may never send a proposed reply yourself');
