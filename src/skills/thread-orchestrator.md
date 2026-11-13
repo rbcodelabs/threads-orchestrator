@@ -45,6 +45,18 @@ notes cursor before reading messages. When `updatedAt` is unchanged, perform no
 reads, writes, questions, or proposals for that thread. Also skip threads that
 are `working` or `isRunning`; reviewing them would race the live session.
 
+## Telling the Portfolio (Project Orchestrator only)
+
+If you have a `notify_portfolio` tool, it sends the Portfolio orchestrator a
+one-way FYI (no reply comes back). Call it only for: an error you cannot fix, a
+needs-you item older than 15 minutes, a PR ready for review or merged, a release
+shipped, work blocked on something outside your Project, or a thread archived
+or deleted that you did not do. Do not call it for routine completions, a
+heartbeat with nothing new, progress, or title changes. Pass `kind`, a
+`subject` (thread id or PR url), and a summary under 400 characters. Repeats
+and bursts are dropped automatically; the heartbeat covers anything you skip.
+The Portfolio Orchestrator never uses this tool.
+
 ## Nested goal contracts
 
 Keep two levels of direction distinct:

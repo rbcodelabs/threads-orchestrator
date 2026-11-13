@@ -128,6 +128,38 @@ describe('ServiceLifecycle', () => {
     expect(onWarn).toHaveBeenCalledWith(expect.stringContaining('torn down'));
   });
 
+  it('a service with extra required capabilities stays off, with one warning naming them, against a core that lacks only those', () => {
+    const onWarn = vi.fn();
+    const client = makeClient(makeApi(REQUIRED_CORE_CAPABILITIES).api);
+    const services: ServiceLike[] = [];
+    const lifecycle = new ServiceLifecycle({
+      client, label: 'project escalation tool', isEnabled: () => true, onWarn,
+      requiredCapabilities: [...REQUIRED_CORE_CAPABILITIES, 'extensions.registerAgentTool'],
+      createService: () => { const s = { start: vi.fn(), stop: vi.fn() }; services.push(s); return s; },
+    });
+    lifecycle.start();
+    lifecycle.sync();
+    expect(services).toHaveLength(0);
+    expect(onWarn).toHaveBeenCalledTimes(1);
+    expect(onWarn.mock.calls[0][0]).toContain('extensions.registerAgentTool');
+    expect(onWarn.mock.calls[0][0]).toContain('project escalation tool');
+  });
+
+  it('a service with extra required capabilities starts once the core offers them, and others are unaffected', () => {
+    const client = makeClient(makeApi([...REQUIRED_CORE_CAPABILITIES, 'extensions.registerAgentTool']).api);
+    const extra: ServiceLike[] = [];
+    new ServiceLifecycle({
+      client, label: 'x', isEnabled: () => true,
+      requiredCapabilities: [...REQUIRED_CORE_CAPABILITIES, 'extensions.registerAgentTool'],
+      createService: () => { const s = { start: vi.fn(), stop: vi.fn() }; extra.push(s); return s; },
+    }).start();
+    expect(extra).toHaveLength(1);
+    // A plain lifecycle on a core that lacks registerAgentTool still starts.
+    const plain = setup(makeClient(makeApi(REQUIRED_CORE_CAPABILITIES).api));
+    plain.lifecycle.start();
+    expect(plain.services).toHaveLength(1);
+  });
+
   it('lifecycles sharing a warn-once guard log the missing-capability warning once per generation', () => {
     const onWarn = vi.fn();
     const api = makeApi([]).api;

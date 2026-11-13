@@ -39,6 +39,8 @@ export interface VoiceSettings {
   enrollmentEmbeddings: number[][] | null;
   /** Send orchestrator wake-ups when other threads finish or fail. */
   wakeOrchestratorsOnActivity: boolean;
+  /** Let Project orchestrators send the Portfolio orchestrator one-way FYIs through the notify_portfolio tool. */
+  projectEscalationsEnabled: boolean;
   /** Periodically ask the orchestrators to reconcile missed activity. */
   heartbeatEnabled: boolean;
   /** Minutes between heartbeats (5-1440). */
@@ -59,6 +61,7 @@ export const DEFAULT_SETTINGS: Omit<VoiceSettings, 'openaiApiKey'> = {
   wakeWordThreshold: 0.75,
   enrollmentEmbeddings: null,
   wakeOrchestratorsOnActivity: true,
+  projectEscalationsEnabled: true,
   heartbeatEnabled: true,
   heartbeatIntervalMinutes: 60,
 };
@@ -415,6 +418,19 @@ export class ThreadsOrchestratorSettingTab extends PluginSettingTab {
             this.plugin.settings.wakeOrchestratorsOnActivity = value;
             await this.plugin.saveSettings();
             this.plugin.applyWakeupSetting();
+          });
+      });
+
+    new Setting(containerEl)
+      .setName('Project orchestrators can notify the Portfolio')
+      .setDesc('Gives each Project orchestrator a notify_portfolio tool for one-way FYIs (errors it cannot fix, PRs ready, releases, blockers). Limited to 1 message per 5 minutes per Project, with repeats dropped. Needs a current Agent Threads version.')
+      .addToggle(toggle => {
+        toggle
+          .setValue(this.plugin.settings.projectEscalationsEnabled)
+          .onChange(async (value) => {
+            this.plugin.settings.projectEscalationsEnabled = value;
+            await this.plugin.saveSettings();
+            this.plugin.applyProjectEscalationsSetting();
           });
       });
 

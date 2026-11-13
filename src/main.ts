@@ -16,6 +16,8 @@ import { ServiceLifecycle } from './ServiceLifecycle';
 import { WakeupService } from './WakeupService';
 import { HeartbeatService, heartbeatIntervalMs } from './HeartbeatService';
 import { SkillService } from './SkillService';
+import { PortfolioNotifier } from './PortfolioNotifier';
+import { EXTENSIONS_REGISTER_AGENT_TOOL_CAPABILITY, REQUIRED_CORE_CAPABILITIES } from './ClaudeThreadsApiTypes';
 import { runAllSafely } from './SafeTeardown';
 
 export default class ThreadsOrchestratorPlugin extends Plugin {
@@ -27,6 +29,7 @@ export default class ThreadsOrchestratorPlugin extends Plugin {
   private wakeupLifecycle: ServiceLifecycle | null = null;
   private heartbeatLifecycle: ServiceLifecycle | null = null;
   private skillLifecycle: ServiceLifecycle | null = null;
+  private escalationLifecycle: ServiceLifecycle | null = null;
 
   // Status bar UI elements
   private statusBarItem!: HTMLElement;
@@ -69,7 +72,15 @@ export default class ThreadsOrchestratorPlugin extends Plugin {
       isEnabled: () => true,
       createService: api => new SkillService(api, { pluginId: this.manifest.id }),
     });
+    // Optional: needs core's extensions.registerAgentTool. Without it only this feature stays off (one warning).
+    this.escalationLifecycle = new ServiceLifecycle({
+      client: this.threadsApi, label: 'project escalation tool (notify_portfolio)', onWarn: warn, warnOnce,
+      isEnabled: () => this.settings.projectEscalationsEnabled !== false,
+      requiredCapabilities: [...REQUIRED_CORE_CAPABILITIES, EXTENSIONS_REGISTER_AGENT_TOOL_CAPABILITY],
+      createService: api => new PortfolioNotifier(api, { pluginId: this.manifest.id, onWarn: warn }),
+    });
     this.skillLifecycle.start();
+    this.escalationLifecycle.start();
     this.wakeupLifecycle.start();
     this.heartbeatLifecycle.start();
     // Idempotent safety net: services must stop even if a later unload step throws.
@@ -186,6 +197,11 @@ export default class ThreadsOrchestratorPlugin extends Plugin {
     this.wakeupLifecycle?.sync();
   }
 
+  /** Called from the settings tab when projectEscalationsEnabled changes. */
+  applyProjectEscalationsSetting(): void {
+    this.escalationLifecycle?.sync();
+  }
+
   /** Called from the settings tab when the heartbeat toggle or interval changes. */
   applyHeartbeatSetting(): void {
     this.heartbeatLifecycle?.restart();
@@ -195,6 +211,7 @@ export default class ThreadsOrchestratorPlugin extends Plugin {
     runAllSafely([
       () => { this.heartbeatLifecycle?.dispose(); this.heartbeatLifecycle = null; },
       () => { this.wakeupLifecycle?.dispose(); this.wakeupLifecycle = null; },
+      () => { this.escalationLifecycle?.dispose(); this.escalationLifecycle = null; },
       () => { this.skillLifecycle?.dispose(); this.skillLifecycle = null; },
     ], error => console.error('[Threads Orchestrator] orchestration teardown failed:', error));
   }

@@ -13,6 +13,8 @@ export interface ServiceLifecycleOptions {
   label: string;
   /** The user-facing on/off setting for this service. */
   isEnabled: () => boolean;
+  /** Capabilities this service needs. Defaults to REQUIRED_CORE_CAPABILITIES; a service with an optional extra capability lists it here so only that service stays off without it. */
+  requiredCapabilities?: readonly string[];
   createService: (api: ClaudeThreadsApiV1) => ServiceLike;
   onWarn?: (message: string) => void;
   /** Shared between lifecycles so the missing-capability warning is logged once per API generation, not once per service. */
@@ -43,7 +45,8 @@ export class ServiceLifecycle {
   sync(): void {
     if (this.disposed) return;
     const api = this.options.client.current();
-    const missing = api ? REQUIRED_CORE_CAPABILITIES.filter(c => !api.capabilities.includes(c)) : [];
+    const required = this.options.requiredCapabilities ?? REQUIRED_CORE_CAPABILITIES;
+    const missing = api ? required.filter(c => !api.capabilities.includes(c)) : [];
     const wanted = !!api && missing.length === 0 && this.options.isEnabled();
     if (this.active && (!wanted || this.active.api !== api)) this.release();
     if (api && missing.length > 0 && this.warned.generation !== api.generation) {
