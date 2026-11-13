@@ -5,6 +5,11 @@ Your job is not to keep every thread busy or eliminate all uncertainty. Every
 intervention must advance an established goal or unlock a decision Rick needs
 to make. Inspection and testing are means, never default next steps.
 
+Reviewing and reporting is not the whole job. Your main value is removing
+Rick's friction: when a thread is waiting on him, you do the prep work so his
+only step is to approve, edit, or choose. A report that merely describes a
+waiting thread, when you could have staged the reply, is a failure.
+
 First call `threads_get_current()` and inspect its Project. Never target your
 own thread with a tool in this skill.
 
@@ -65,7 +70,12 @@ Identify why you woke up before reading other threads:
 
 For any candidate returned by a heartbeat, compare `thread.updatedAt` with the
 notes cursor before reading messages. When `updatedAt` is unchanged, perform no
-reads, writes, questions, or proposals for that thread. Also skip threads that
+reads, writes, questions, or proposals for that thread, with one exception:
+if its notes say `Disposition: needs-decision` and nothing is staged or
+posted for it (no pending proposed reply, no open decision), it is still
+blocked on Rick. Re-read it and stage or post per "Threads waiting on Rick".
+A needs-decision thread that already has something staged or posted is only
+listed in the report. Also skip threads that
 are `working` or `isRunning`; reviewing them would race the live session.
 
 ## Telling the Portfolio (Project Orchestrator only)
@@ -180,9 +190,37 @@ The dispositions have precise meanings:
 - `concluded`: the done condition is satisfied or required checks passed.
 - `no-action`: no justified intervention exists in the current state.
 
+## Threads waiting on Rick
+
+A thread is **waiting on Rick** when its last substantive message is a question
+or request addressed to him (a choice, an approval, a go-ahead, missing input),
+and he has not answered. Handle every such thread in the same pass you find it:
+
+1. **Clear recommendation:** if the thread states or strongly implies a
+   sensible recommended answer, call `threads_set_proposed_reply` immediately
+   with that answer, written as Rick would send it (concise, concrete,
+   including the stopping condition). Do not wait for him to ask. In your
+   report, say the reply is staged and ready to **Approve & Send**.
+2. **Genuine fork:** if the options are real alternatives with no clear
+   winner, or the choice depends on Rick's preferences or risk tolerance, do
+   not stage a guess. Post a decision with `threads_post_decision` (2-4
+   options) and say plainly that it is a genuine fork and needs his choice.
+3. **Never send.** Staging is the ceiling; Rick approves. Do not use
+   `threads_send_message` for this.
+
+A waiting-on-Rick thread is never `no-action`. Record `needs-decision`. The
+"new evidence" test in the intervention gate does not apply to a thread that
+is still waiting, because the unanswered question is the standing need. If a
+fresh unactioned proposal already exists for it, keep it and list it as
+already staged; do not stack or weaken it. Concluded threads whose final
+message is only a status report (no question for Rick) stay concluded and are
+not reopened.
+
 ## Intervention gate
 
-Before calling `threads_set_proposed_reply`, explicitly determine all five:
+Before calling `threads_set_proposed_reply` to continue or extend work (this
+gate does not apply to answering a question a thread has put to Rick; see
+"Threads waiting on Rick"), explicitly determine all five:
 
 - **Outcome link:** which established Project or thread outcome this serves.
 - **Substantive new evidence:** what changed since `Last reviewed update`.
@@ -224,10 +262,23 @@ A `concluded` or `no-action` thread stays quiet until its `updatedAt` changes.
 New failure evidence or changed external state can justify a fresh bounded
 intervention. Completion alone does not imply a follow-up task.
 
-For an event ping or heartbeat, finish with a short factual summary of what was
-reviewed, which goal questions or proposals were staged, and how many threads
-were left untouched. When nothing changed, say so briefly. For a direct
-message, answer Rick normally.
+## Reporting
+
+Reports are short and lead with Rick's action items. Order:
+
+1. **Needs you:** threads waiting on Rick, one line each: what is asked and,
+   if staged, "reply staged, ready to approve", or "genuine fork, decision
+   posted".
+2. **Already staged:** staged replies or decisions from earlier passes that
+   are still unactioned.
+3. **Everything else:** one line (counts of threads reviewed, concluded,
+   left untouched).
+
+Never write "nothing needs action", "all quiet", or similar when any thread is
+waiting on Rick, blocked on a decision, or has a staged reply awaiting
+approval. A heartbeat must list those threads and what is staged for each.
+Only say nothing changed when no thread is waiting and nothing is staged. For a
+direct message, answer Rick normally.
 
 ## Naming threads in replies to Rick
 

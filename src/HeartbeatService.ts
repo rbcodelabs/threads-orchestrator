@@ -11,8 +11,8 @@
  */
 import type { ClaudeThreadsApiV1 } from './ClaudeThreadsApiTypes';
 
-export const PORTFOLIO_HEARTBEAT_PROMPT = 'Heartbeat: reconcile activity missed by targeted event reviews across all threads. Do not reopen concluded work whose updatedAt is unchanged.';
-export const PROJECT_HEARTBEAT_PROMPT = 'Heartbeat: reconcile Project activity missed by targeted event reviews. Do not reopen concluded work whose updatedAt is unchanged.';
+export const PORTFOLIO_HEARTBEAT_PROMPT = 'Heartbeat: reconcile activity missed by targeted event reviews across all threads. Do not reopen concluded work whose updatedAt is unchanged. Stage a proposed reply for every thread waiting on Rick that has a clear recommendation (never send it), post a decision for genuine forks, and lead the report with threads needing Rick and what is staged; never report "nothing needs action" while any thread is waiting or has a staged reply.';
+export const PROJECT_HEARTBEAT_PROMPT = 'Heartbeat: reconcile Project activity missed by targeted event reviews. Do not reopen concluded work whose updatedAt is unchanged. Stage a proposed reply for every thread waiting on Rick that has a clear recommendation (never send it), post a decision for genuine forks, and lead the report with threads needing Rick and what is staged; never report "nothing needs action" while any thread is waiting or has a staged reply.';
 export const DEFAULT_HEARTBEAT_MINUTES = 60;
 export const MIN_HEARTBEAT_MINUTES = 5;
 export const MAX_HEARTBEAT_MINUTES = 1440;

@@ -25,8 +25,8 @@ function setup(list: OrchestratorSnapshot[] | (() => Promise<OrchestratorSnapsho
 
 describe('HeartbeatService', () => {
   it('copies core heartbeat prompts exactly', () => {
-    expect(PORTFOLIO_HEARTBEAT_PROMPT).toBe('Heartbeat: reconcile activity missed by targeted event reviews across all threads. Do not reopen concluded work whose updatedAt is unchanged.');
-    expect(PROJECT_HEARTBEAT_PROMPT).toBe('Heartbeat: reconcile Project activity missed by targeted event reviews. Do not reopen concluded work whose updatedAt is unchanged.');
+    expect(PORTFOLIO_HEARTBEAT_PROMPT).toBe('Heartbeat: reconcile activity missed by targeted event reviews across all threads. Do not reopen concluded work whose updatedAt is unchanged. Stage a proposed reply for every thread waiting on Rick that has a clear recommendation (never send it), post a decision for genuine forks, and lead the report with threads needing Rick and what is staged; never report "nothing needs action" while any thread is waiting or has a staged reply.');
+    expect(PROJECT_HEARTBEAT_PROMPT).toBe('Heartbeat: reconcile Project activity missed by targeted event reviews. Do not reopen concluded work whose updatedAt is unchanged. Stage a proposed reply for every thread waiting on Rick that has a clear recommendation (never send it), post a decision for genuine forks, and lead the report with threads needing Rick and what is staged; never report "nothing needs action" while any thread is waiting or has a staged reply.');
   });
 
   it('arms one interval timer with the configured period and does not fire immediately', () => {
