@@ -1,6 +1,6 @@
 {
   "name": "threads-orchestrator",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "Voice-first orchestration for Claude agents and documents in Obsidian or Geode",
   "main": "dist/main.js",
   "scripts": {
