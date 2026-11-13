@@ -269,9 +269,9 @@ front of Rick twice and skip his choice.
    nothing is pending**: the host omits `proposedReply` and `pendingDecisions`
    when nothing is pending, so a thread without them is clean, provided your
    tool list includes `threads_post_decision`. Treat the state as **unknown**
-   only when that tool is missing (an older host). Then stage nothing, and post
-   a decision only if the manager notes show nothing staged or posted for this
-   `updatedAt`.
+   only when that tool is missing (an older host). Then stage nothing and
+   post nothing, and tell Rick plainly that you cannot read pending state on
+   this host, so you did not stage or post for that thread.
 2. **Decision open: stage nothing.** If `pendingDecisions` is non-empty, do not
    call `threads_set_proposed_reply` for that thread, whatever else you notice.
 3. **Decision needed, reply staged: clear first.** If a thread needs a choice

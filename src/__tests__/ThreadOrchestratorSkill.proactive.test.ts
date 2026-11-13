@@ -74,7 +74,8 @@ describe('thread-orchestrator skill: proactive waiting-on-Rick rules', () => {
     expect(body).toContain('Absent fields mean nothing is pending');
     expect(body).toContain('the host omits `proposedReply` and `pendingDecisions` when nothing is pending');
     expect(body).toContain('Treat the state as **unknown** only when that tool is missing');
-    expect(body).toContain('post a decision only if the manager notes show nothing staged or posted for this `updatedAt`');
+    expect(body).toContain('tell Rick plainly that you cannot read pending state on this host');
+    expect(body).not.toContain('post a decision only if the manager notes show nothing staged');
     expect(body).not.toContain('treat the pending state as unknown (do not stage or post on a guess');
   });
 
