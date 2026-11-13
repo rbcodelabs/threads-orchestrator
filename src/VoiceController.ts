@@ -766,7 +766,7 @@ export class VoiceController {
 
   private getCurrentDocContent(): string {
     if (!this.lastMarkdownView) return '(no document currently open)';
-    return this.lastMarkdownView.editor.getValue();
+    return this.lastMarkdownView.editor?.getValue() ?? '(no document currently open)';
   }
 
   handleThreadsUnavailable(): void {
