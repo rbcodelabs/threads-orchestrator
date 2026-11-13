@@ -186,7 +186,8 @@ describe('ServiceLifecycle with the real WakeupService', () => {
       const lc = new ServiceLifecycle({ client: makeClient(a.api), label: 'w', isEnabled: () => enabled.v, createService: create });
       lc.start();
       a.emit('t1'); a.emit('t2');
-      await vi.advanceTimersByTimeAsync(11_999);
+      // 60 s per-thread debounce, then the 12 s bucket batch.
+      await vi.advanceTimersByTimeAsync(71_999);
       expect(a.dispatch).not.toHaveBeenCalled();
       await vi.advanceTimersByTimeAsync(2);
       expect(a.dispatch).toHaveBeenCalledTimes(1);
