@@ -34,7 +34,10 @@ function setup(o: {
   const emit = (kind: 'run.completed' | 'run.failed', threadId: string) =>
     listener({ kind, threadId, runId: 'r', at: 1, error: { code: 'RUN_FAILED', message: 'x' } } as PublicThreadEvent);
   const settle = async () => { for (let i = 0; i < 40; i++) await Promise.resolve(); };
-  const fire = async () => { callbacks.splice(0).forEach(cb => cb()); await settle(); };
+  // Also fires the bucket timer that a fired per-thread timer arms (thread debounce -> bucket batch).
+  const fire = async () => {
+    for (let round = 0; round < 3 && callbacks.length > 0; round++) { callbacks.splice(0).forEach(cb => cb()); await settle(); }
+  };
   return { service, emit, settle, fire, callbacks, cleared, dispatch, list, get, state, warn, error, api };
 }
 const prompts = (t: ReturnType<typeof setup>) => t.dispatch.mock.calls.map(c => `${c[0].id}:${c[1].prompt}`);
@@ -56,7 +59,7 @@ describe('WakeupService QA: no self-ping loop', () => {
     expect(t.dispatch).not.toHaveBeenCalled();
   });
 
-  it('chain worker -> project orchestrator -> portfolio terminates: portfolio completion adds nothing', async () => {
+  it('chain worker -> project orchestrator -> portfolio terminates: neither orchestrator turn reaches the portfolio', async () => {
     const t = setup({
       threads: { w: { title: 'W', projectId: 'p1' }, 'orch-p1': { title: 'PO', projectId: 'p1' }, 'orch-portfolio': {} },
       orchestrators: [portfolio, p1(true)],
@@ -64,13 +67,13 @@ describe('WakeupService QA: no self-ping loop', () => {
     t.emit('run.completed', 'w'); await t.settle(); await t.fire();
     t.emit('run.completed', 'orch-p1'); await t.settle(); await t.fire();
     t.emit('run.completed', 'orch-portfolio'); await t.settle(); await t.fire();
-    expect(t.dispatch.mock.calls.map(c => c[0].id)).toEqual(['project:p1', 'portfolio']);
+    expect(t.dispatch.mock.calls.map(c => c[0].id)).toEqual(['project:p1']);
   });
 
-  it('a Project orchestrator of a DISABLED project still routes to the portfolio, not dropped', async () => {
+  it('a Project orchestrator of a DISABLED project is dropped too (never routed to the portfolio)', async () => {
     const t = setup({ threads: { 'orch-p1': { title: 'PO', projectId: 'p1' } }, orchestrators: [portfolio, p1(false)] });
     t.emit('run.completed', 'orch-p1'); await t.settle(); await t.fire();
-    expect(t.dispatch.mock.calls.map(c => c[0].id)).toEqual(['portfolio']);
+    expect(t.dispatch).not.toHaveBeenCalled();
   });
 
   it('a Project thread whose orchestrator does not exist yet routes to project:<id> (lazily created by core)', async () => {
@@ -81,10 +84,14 @@ describe('WakeupService QA: no self-ping loop', () => {
 });
 
 describe('WakeupService QA: debounce and batching', () => {
-  it('a second event re-arms (clears) the debounce timer so only one dispatch results', async () => {
+  it('a second event re-arms (clears) the bucket debounce timer so only one dispatch results', async () => {
     const t = setup({ threads: { a: { title: 'A' }, b: { title: 'B' } } });
     t.emit('run.completed', 'a'); await t.settle();
     t.emit('run.completed', 'b'); await t.settle();
+    expect(t.callbacks).toHaveLength(2); // one per-thread timer each
+    const [aTimer, bTimer] = t.callbacks.splice(0);
+    aTimer(); await t.settle();
+    bTimer(); await t.settle(); // b joining the batch re-arms the bucket timer
     expect(t.callbacks).toHaveLength(1);
     expect(t.cleared.length).toBe(1);
     await t.fire();

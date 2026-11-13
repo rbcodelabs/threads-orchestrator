@@ -15,6 +15,7 @@ function setup(options: {
   orchestrators?: OrchestratorSnapshot[];
   dispatch?: (target: { id: string }, input: { prompt: string; queueIfBusy?: boolean }) => Promise<{ runId: string }>;
   debounceMs?: number;
+  threadDebounceMs?: number;
 } = {}) {
   let listener!: (event: PublicThreadEvent) => void;
   const threads = options.threads ?? {};
@@ -31,11 +32,13 @@ function setup(options: {
   } as unknown as ClaudeThreadsApiV1;
   const callbacks: Array<() => void> = [];
   const delays: number[] = [];
+  const msOf = new Map<() => void, number>();
   const warn = vi.fn();
   const error = vi.fn();
   const service = new WakeupService(api, {
     debounceMs: options.debounceMs,
-    setTimeoutFn: (cb, ms) => { callbacks.push(cb); delays.push(ms); return cb; },
+    threadDebounceMs: options.threadDebounceMs,
+    setTimeoutFn: (cb, ms) => { callbacks.push(cb); delays.push(ms); msOf.set(cb, ms); return cb; },
     clearTimeoutFn: handle => { const i = callbacks.indexOf(handle as () => void); if (i >= 0) callbacks.splice(i, 1); },
     onWarn: warn, onError: error,
   });
@@ -43,8 +46,22 @@ function setup(options: {
   const emit = (event: { kind: PublicThreadEvent['kind']; threadId: string }) =>
     listener({ runId: 'r1', at: 1, error: { code: 'RUN_FAILED', message: 'boom' }, ...event } as PublicThreadEvent);
   const settle = async () => { for (let i = 0; i < 30; i++) await Promise.resolve(); };
-  const fire = async () => { const pending = callbacks.splice(0); pending.forEach(cb => cb()); await settle(); };
-  return { api, service, emit, settle, fire, callbacks, delays, dispatch, warn, error, orchestrators, subscriptionDispose };
+  // Fires every pending timer, including the follow-up bucket timer a per-thread timer arms (thread debounce -> bucket batch).
+  const fire = async () => {
+    for (let round = 0; round < 3 && callbacks.length > 0; round++) {
+      const pending = callbacks.splice(0);
+      pending.forEach(cb => cb());
+      await settle();
+    }
+  };
+  // Fires only the pending timers armed with this delay (60000 = per-thread debounce, 12000 = bucket batch).
+  const fireWhere = async (ms: number) => {
+    const due = callbacks.filter(cb => msOf.get(cb) === ms);
+    for (const cb of due) callbacks.splice(callbacks.indexOf(cb), 1);
+    due.forEach(cb => cb());
+    await settle();
+  };
+  return { api, service, emit, settle, fire, fireWhere, callbacks, delays, dispatch, warn, error, orchestrators, subscriptionDispose };
 }
 
 describe('WakeupService', () => {
@@ -65,12 +82,13 @@ describe('WakeupService', () => {
     t.emit({ kind: 'run.completed', threadId: 'thread-1' });
     t.emit({ kind: 'run.failed', threadId: 'thread-2' });
     await t.settle();
-    await t.fire();
+    await t.fireWhere(60_000); // thread-1 settles and joins the batch the error already opened
+    await t.fireWhere(12_000);
     expect(t.dispatch).toHaveBeenCalledTimes(1);
     expect(t.dispatch.mock.calls[0][1].prompt).toBe([
       HEADER_2,
-      '- thread-1 "Fix login bug" (done; updatedAt=1700000000000)',
       '- thread-2 "Update docs" (error; updatedAt=1700000000000)',
+      '- thread-1 "Fix login bug" (done; updatedAt=1700000000000)',
     ].join('\n'));
   });
 
@@ -85,12 +103,24 @@ describe('WakeupService', () => {
 
   it('keeps only the most recent status when a thread fires twice before flush', async () => {
     const t = setup({ threads: { 'thread-1': { title: 'Flaky' } } });
+    t.emit({ kind: 'run.completed', threadId: 'thread-1' });
+    t.emit({ kind: 'run.failed', threadId: 'thread-1' });
+    await t.settle();
+    await t.fire();
+    expect(t.dispatch).toHaveBeenCalledTimes(1);
+    expect(t.dispatch.mock.calls[0][1].prompt).toBe(`${HEADER_1}\n- thread-1 "Flaky" (error; updatedAt=1700000000000)`);
+  });
+
+  it('an error is reported at once and a later done for the same thread is reported separately after its debounce', async () => {
+    const t = setup({ threads: { 'thread-1': { title: 'Flaky' } } });
     t.emit({ kind: 'run.failed', threadId: 'thread-1' });
     t.emit({ kind: 'run.completed', threadId: 'thread-1' });
     await t.settle();
     await t.fire();
-    expect(t.dispatch).toHaveBeenCalledTimes(1);
-    expect(t.dispatch.mock.calls[0][1].prompt).toBe(`${HEADER_1}\n- thread-1 "Flaky" (done; updatedAt=1700000000000)`);
+    expect(t.dispatch.mock.calls.map(c => c[1].prompt.split('\n')[1])).toEqual([
+      '- thread-1 "Flaky" (error; updatedAt=1700000000000)',
+      '- thread-1 "Flaky" (done; updatedAt=1700000000000)',
+    ]);
   });
 
   it('ignores events other than run.completed and run.failed', async () => {
@@ -107,11 +137,13 @@ describe('WakeupService', () => {
     const def = setup({ threads: { a: {} } });
     def.emit({ kind: 'run.completed', threadId: 'a' });
     await def.settle();
-    expect(def.delays).toEqual([12_000]);
-    const custom = setup({ threads: { a: {} }, debounceMs: 500 });
+    await def.fireWhere(60_000);
+    expect(def.delays).toEqual([60_000, 12_000]);
+    const custom = setup({ threads: { a: {} }, debounceMs: 500, threadDebounceMs: 7 });
     custom.emit({ kind: 'run.completed', threadId: 'a' });
     await custom.settle();
-    expect(custom.delays).toEqual([500]);
+    await custom.fireWhere(7);
+    expect(custom.delays).toEqual([7, 500]);
   });
 
   it('does not wake for the portfolio orchestrator thread itself', async () => {
@@ -122,7 +154,7 @@ describe('WakeupService', () => {
     expect(t.dispatch).not.toHaveBeenCalled();
   });
 
-  it('routes Project threads to project:<id> and Project orchestrators to the portfolio', async () => {
+  it('routes Project threads to project:<id> and drops a Project orchestrator thread entirely', async () => {
     const t = setup({
       threads: { w: { title: 'Worker', projectId: 'p1' }, 'orch-p1': { title: 'P1 orch', projectId: 'p1' } },
       orchestrators: [
@@ -134,9 +166,9 @@ describe('WakeupService', () => {
     t.emit({ kind: 'run.completed', threadId: 'orch-p1' });
     await t.settle();
     await t.fire();
-    expect(t.dispatch.mock.calls.map(c => c[0].id).sort()).toEqual(['portfolio', 'project:p1']);
-    expect(t.dispatch.mock.calls.find(c => c[0].id === 'project:p1')![1].prompt).toContain('- w "Worker"');
-    expect(t.dispatch.mock.calls.find(c => c[0].id === 'portfolio')![1].prompt).toContain('- orch-p1 "P1 orch"');
+    expect(t.dispatch.mock.calls.map(c => c[0].id)).toEqual(['project:p1']);
+    expect(t.dispatch.mock.calls[0][1].prompt).toContain('- w "Worker"');
+    expect(t.dispatch.mock.calls[0][1].prompt).not.toContain('orch-p1');
   });
 
   it('routes a thread with no projectId to the portfolio', async () => {
@@ -318,5 +350,143 @@ describe('WakeupService', () => {
     some.emit({ kind: 'run.completed', threadId: 'a' });
     await some.settle(); await some.fire();
     expect(some.dispatch).toHaveBeenCalledTimes(1);
+  });
+
+  describe('per-thread debounce and project orchestrator filtering', () => {
+    const p1Orch = { id: 'project:p1', kind: 'project', threadId: 'orch-p1', projectId: 'p1', title: 'P1', enabled: true } as OrchestratorSnapshot;
+
+    it("a project orchestrator's own done and error never reach the portfolio", async () => {
+      const t = setup({ threads: { 'orch-p1': { title: 'P1 orch', projectId: 'p1' } }, orchestrators: [portfolio, p1Orch] });
+      t.emit({ kind: 'run.completed', threadId: 'orch-p1' });
+      t.emit({ kind: 'run.failed', threadId: 'orch-p1' });
+      await t.settle();
+      expect(t.callbacks).toHaveLength(0);
+      await t.fire();
+      expect(t.dispatch).not.toHaveBeenCalled();
+    });
+
+    it('three completions of one thread inside the window give one notice with the latest state', async () => {
+      const threads = { a: { title: 'Rolling', updatedAt: 1 } };
+      const t = setup({ threads });
+      for (const updatedAt of [1, 2, 3]) {
+        threads.a.updatedAt = updatedAt;
+        t.emit({ kind: 'run.completed', threadId: 'a' });
+        await t.settle();
+        await t.fireWhere(12_000); // 12 s of quiet passes between turns; the 60 s thread window does not
+      }
+      expect(t.dispatch).not.toHaveBeenCalled();
+      expect(t.callbacks).toHaveLength(1);
+      await t.fireWhere(60_000);
+      expect(t.dispatch).not.toHaveBeenCalled();
+      await t.fireWhere(12_000);
+      expect(t.dispatch).toHaveBeenCalledTimes(1);
+      expect(t.dispatch.mock.calls[0][1].prompt).toBe(`${HEADER_1}\n- a "Rolling" (done; updatedAt=3)`);
+    });
+
+    it('each new completion resets the per-thread timer', async () => {
+      const t = setup({ threads: { a: {} } });
+      t.emit({ kind: 'run.completed', threadId: 'a' });
+      await t.settle();
+      const first = t.callbacks[0];
+      t.emit({ kind: 'run.completed', threadId: 'a' });
+      await t.settle();
+      expect(t.callbacks).toHaveLength(1);
+      expect(t.callbacks[0]).not.toBe(first);
+      expect(t.delays).toEqual([60_000, 60_000]);
+      first(); // a stale fire of the cancelled timer must not flush anything
+      await t.settle();
+      expect(t.delays).toEqual([60_000, 60_000]);
+      expect(t.dispatch).not.toHaveBeenCalled();
+    });
+
+    it('an error bypasses the thread debounce and cancels the pending done timer', async () => {
+      const t = setup({ threads: { a: { title: 'Flaky' } } });
+      t.emit({ kind: 'run.completed', threadId: 'a' });
+      await t.settle();
+      t.emit({ kind: 'run.failed', threadId: 'a' });
+      await t.settle();
+      expect(t.delays).toEqual([60_000, 12_000]); // error goes straight to the 12 s bucket batch
+      expect(t.callbacks.map(cb => cb)).toHaveLength(1); // the done timer is gone
+      await t.fire();
+      expect(t.dispatch).toHaveBeenCalledTimes(1);
+      expect(t.dispatch.mock.calls[0][1].prompt).toBe(`${HEADER_1}\n- a "Flaky" (error; updatedAt=1700000000000)`);
+    });
+
+    it('a done after an error debounces normally', async () => {
+      const t = setup({ threads: { a: { title: 'Flaky' } } });
+      t.emit({ kind: 'run.failed', threadId: 'a' });
+      await t.settle();
+      await t.fire();
+      t.emit({ kind: 'run.completed', threadId: 'a' });
+      await t.settle();
+      expect(t.delays.slice(-1)).toEqual([60_000]);
+      await t.fire();
+      expect(t.dispatch).toHaveBeenCalledTimes(2);
+      expect(t.dispatch.mock.calls[1][1].prompt).toContain('(done;');
+    });
+
+    it('invalidateBucket clears thread timers and a late fire sends nothing', async () => {
+      const t = setup({ threads: { a: { title: 'A' } } });
+      t.emit({ kind: 'run.completed', threadId: 'a' });
+      await t.settle();
+      const [threadTimer] = t.callbacks;
+      expect(t.delays).toEqual([60_000]);
+      t.service.invalidateBucket('portfolio');
+      expect(t.callbacks).toHaveLength(0);
+      threadTimer();
+      await t.settle();
+      await t.fire();
+      expect(t.dispatch).not.toHaveBeenCalled();
+    });
+
+    it('invalidateBucket leaves thread timers of other buckets alone', async () => {
+      const t = setup({ threads: { a: { title: 'A' }, w: { title: 'W', projectId: 'p1' } }, orchestrators: [portfolio, p1Orch] });
+      t.emit({ kind: 'run.completed', threadId: 'a' });
+      t.emit({ kind: 'run.completed', threadId: 'w' });
+      await t.settle();
+      expect(t.delays).toEqual([60_000, 60_000]);
+      t.service.invalidateBucket('portfolio');
+      expect(t.callbacks).toHaveLength(1);
+      await t.fire();
+      expect(t.dispatch.mock.calls.map(c => c[0].id)).toEqual(['project:p1']);
+    });
+
+    it('stop clears thread timers and nothing fires afterwards', async () => {
+      const t = setup({ threads: { a: { title: 'A' } } });
+      t.emit({ kind: 'run.completed', threadId: 'a' });
+      await t.settle();
+      const [threadTimer] = t.callbacks;
+      expect(t.delays).toEqual([60_000]);
+      t.service.stop();
+      expect(t.callbacks).toHaveLength(0);
+      threadTimer();
+      await t.settle();
+      await t.fire();
+      expect(t.dispatch).not.toHaveBeenCalled();
+    });
+
+    it('a thread with no project still notifies the portfolio 60 s after it settles, then batches 12 s', async () => {
+      const t = setup({ threads: { a: { title: 'A' } } });
+      t.emit({ kind: 'run.completed', threadId: 'a' });
+      await t.settle();
+      expect(t.delays).toEqual([60_000]);
+      await t.fireWhere(60_000);
+      expect(t.delays).toEqual([60_000, 12_000]);
+      expect(t.dispatch).not.toHaveBeenCalled();
+      await t.fireWhere(12_000);
+      expect(t.dispatch).toHaveBeenCalledTimes(1);
+      expect(t.dispatch.mock.calls[0][0]).toEqual({ id: 'portfolio' });
+    });
+
+    it('a Project worker thread is debounced too before it reaches project:<id>', async () => {
+      const t = setup({ threads: { w: { title: 'W', projectId: 'p1' } }, orchestrators: [portfolio, p1Orch] });
+      t.emit({ kind: 'run.completed', threadId: 'w' });
+      t.emit({ kind: 'run.completed', threadId: 'w' });
+      await t.settle();
+      expect(t.callbacks).toHaveLength(1);
+      await t.fire();
+      expect(t.dispatch).toHaveBeenCalledTimes(1);
+      expect(t.dispatch.mock.calls[0][0]).toEqual({ id: 'project:p1' });
+    });
   });
 });

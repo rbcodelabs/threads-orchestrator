@@ -11,6 +11,16 @@
  * - a Project dispatch that fails falls back to a summary-only portfolio ping
  *   that exposes no Project thread details
  *
+ * Differences from core, to stop no-op notices:
+ * - a Project orchestrator's own thread (done or error) never wakes anything; the
+ *   heartbeats are the safety net for its silent failures
+ * - a finished thread (run.completed) is reported once, after it has been quiet for
+ *   threadDebounceMs (default 60 s, a trailing debounce per thread): each new completion
+ *   restarts that thread's timer, and when it fires the thread joins the bucket batch
+ *   (12 s debounce), so a finish is reported up to about 72 s later with its latest state
+ * - a failure (run.failed) skips the per-thread debounce, goes straight to the bucket
+ *   batch, and cancels that thread's pending done timer so a later done cannot replace it
+ *
  * Agent Threads core no longer wakes orchestrators; this is the only sender
  * (started by ServiceLifecycle against a core with the required capabilities).
  * Wake-ups go only to orchestrators that already exist: a Portfolio dispatch is
@@ -23,6 +33,8 @@ import type { ClaudeThreadsApiV1, Disposable, OrchestratorSnapshot, PublicThread
 export interface WakeupServiceOptions {
   /** ms to wait after the last completion before flushing a batch. Default 12000. */
   debounceMs?: number;
+  /** ms a thread must stay quiet after a completion before it joins the bucket batch. Default 60000. */
+  threadDebounceMs?: number;
   setTimeoutFn?: (cb: () => void, ms: number) => unknown;
   clearTimeoutFn?: (handle: unknown) => void;
   /** Max THREAD_BUSY re-queues per batch before it is dropped (the heartbeat covers it). Default 3. */
@@ -33,6 +45,7 @@ export interface WakeupServiceOptions {
 
 type Status = 'done' | 'error';
 const DEFAULT_DEBOUNCE_MS = 12_000;
+const DEFAULT_THREAD_DEBOUNCE_MS = 60_000;
 const DEFAULT_MAX_BUSY_RETRIES = 3;
 const PORTFOLIO = 'portfolio';
 
@@ -47,6 +60,8 @@ export class WakeupService {
   /** Buckets whose last dispatch hit THREAD_BUSY, waiting for the orchestrator's next completion. */
   private held = new Map<string, { entries: Map<string, Status>; retries: number }>();
   private timers = new Map<string, unknown>();
+  /** Thread id -> its pending per-thread debounce for a 'done' completion. Identity of the entry is the fire guard. */
+  private threadTimers = new Map<string, { bucket: string; handle?: unknown }>();
   private generations = new Map<string, number>();
   /** Bumped on stop() so in-flight async work from a previous run aborts. */
   private epoch = 0;
@@ -65,6 +80,7 @@ export class WakeupService {
     this.epoch++;
     try { subscription?.dispose(); } catch (error) { this.options.onError?.(error); }
     for (const bucket of [...this.timers.keys()]) this.clearTimer(bucket);
+    for (const threadId of [...this.threadTimers.keys()]) this.clearThreadTimer(threadId);
     this.pending.clear();
     this.held.clear();
     this.generations.clear();
@@ -73,6 +89,7 @@ export class WakeupService {
   /** Permanently discards the bucket's queued and in-flight batch; later events start a fresh generation. */
   invalidateBucket(bucket: string): void {
     this.clearTimer(bucket);
+    for (const [threadId, entry] of [...this.threadTimers]) if (entry.bucket === bucket) this.clearThreadTimer(threadId);
     this.pending.delete(bucket);
     this.held.delete(bucket);
     this.generations.set(bucket, this.generation(bucket) + 1);
@@ -92,13 +109,45 @@ export class WakeupService {
       this.retryHeldBatches(event.threadId, orchestrators);
       const bucket = await this.resolveBucket(event.threadId, orchestrators);
       if (epoch !== this.epoch || !bucket) return;
-      const entries = this.pending.get(bucket) ?? new Map<string, Status>();
-      entries.set(event.threadId, status);
-      this.pending.set(bucket, entries);
-      this.armTimer(bucket);
+      if (status === 'error') {
+        // Errors are not debounced, and must not be overwritten by a 'done' timer that is still pending.
+        this.clearThreadTimer(event.threadId);
+        this.enqueue(bucket, event.threadId, status);
+      } else {
+        this.armThreadTimer(bucket, event.threadId);
+      }
     } catch (error) {
       this.options.onError?.(error);
     }
+  }
+
+  private enqueue(bucket: string, threadId: string, status: Status): void {
+    const entries = this.pending.get(bucket) ?? new Map<string, Status>();
+    entries.set(threadId, status);
+    this.pending.set(bucket, entries);
+    this.armTimer(bucket);
+  }
+
+  /** Trailing debounce per thread: each completion restarts the window; only a quiet thread joins the bucket batch. */
+  private armThreadTimer(bucket: string, threadId: string): void {
+    this.clearThreadTimer(threadId);
+    const setTimeoutFn = this.options.setTimeoutFn ?? ((cb, ms) => setTimeout(cb, ms));
+    const entry: { bucket: string; handle?: unknown } = { bucket };
+    this.threadTimers.set(threadId, entry);
+    entry.handle = setTimeoutFn(() => {
+      // A cleared or replaced timer that still fires (stop, invalidateBucket, error) is stale and must do nothing.
+      if (this.threadTimers.get(threadId) !== entry) return;
+      this.threadTimers.delete(threadId);
+      this.enqueue(bucket, threadId, 'done');
+    }, this.options.threadDebounceMs ?? DEFAULT_THREAD_DEBOUNCE_MS);
+  }
+
+  private clearThreadTimer(threadId: string): void {
+    const entry = this.threadTimers.get(threadId);
+    if (!entry) return;
+    this.threadTimers.delete(threadId);
+    const clearTimeoutFn = this.options.clearTimeoutFn ?? (handle => clearTimeout(handle as ReturnType<typeof setTimeout>));
+    clearTimeoutFn(entry.handle);
   }
 
   /** The orchestrator finishing a run is the cue to retry a batch it was too busy to take. */
@@ -111,7 +160,8 @@ export class WakeupService {
   private async resolveBucket(threadId: string, orchestrators: readonly OrchestratorSnapshot[]): Promise<string | undefined> {
     const own = orchestrators.find(o => o.threadId === threadId);
     if (own?.kind === 'portfolio') return undefined;
-    if (own?.kind === 'project') return PORTFOLIO;
+    // A Project orchestrator's own turns are noise to the portfolio; its heartbeat covers silent failures.
+    if (own?.kind === 'project') return undefined;
     const thread = await this.api.threads.get(threadId);
     if (!thread) return undefined;
     if (!thread.projectId) return PORTFOLIO;
