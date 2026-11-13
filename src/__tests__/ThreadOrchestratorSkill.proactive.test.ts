@@ -53,7 +53,7 @@ describe('thread-orchestrator skill: proactive waiting-on-Rick rules', () => {
   it('reads proposedReply and pendingDecisions before staging or posting and trusts them over memory', () => {
     expect(body).toContain('Before every `threads_set_proposed_reply` or `threads_post_decision` on a thread');
     expect(body).toContain('That state is authoritative over anything you remember staging or posting');
-    expect(body).toContain('treat the pending state as unknown');
+    expect(body).toContain('Treat the state as unknown only when that tool is missing');
   });
 
   it('posts the decision first and relays only after the answer, then marks the notes answered', () => {
