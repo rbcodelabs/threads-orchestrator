@@ -70,6 +70,29 @@ describe('thread-orchestrator skill: proactive waiting-on-Rick rules', () => {
     expect(body).toContain('A staged reply owned by another orchestrator is not yours to clear');
   });
 
+  it('treats absent proposedReply/pendingDecisions as nothing pending unless threads_post_decision is missing', () => {
+    expect(body).toContain('Absent fields mean nothing is pending');
+    expect(body).toContain('the host omits `proposedReply` and `pendingDecisions` when nothing is pending');
+    expect(body).toContain('Treat the state as **unknown** only when that tool is missing');
+    expect(body).toContain('post a decision only if the manager notes show nothing staged or posted for this `updatedAt`');
+    expect(body).not.toContain('treat the pending state as unknown (do not stage or post on a guess');
+  });
+
+  it('allows one threads_list read on an event ping before staging or posting', () => {
+    expect(body).toContain('the one exception is a single `threads_list()` read to check `proposedReply` and `pendingDecisions`');
+  });
+
+  it('relay with no reply needed marks answered and no-action; a needed relay clears a stale reply first', () => {
+    expect(body).toContain('only when the thread needs to know it');
+    expect(body).toContain('first clear any stale staged reply you own');
+    expect(body).toContain('stage nothing and set `Staged: answered (decision <id>)` and `Disposition: no-action`');
+  });
+
+  it('gives a moot open decision an escape and counts a decision answer as authorization', () => {
+    expect(body).toContain('`threads_clear_decision` for any open decision you posted that is now moot');
+    expect(body).toContain('his answer to a decision you posted that named this action');
+  });
+
   it('still forbids sending', () => {
     expect(body).toContain('**Never send.**');
     expect(body).toContain('You may never send a proposed reply yourself');
