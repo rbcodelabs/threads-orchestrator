@@ -90,11 +90,18 @@ Identify why you woke up before reading other threads:
 For any candidate returned by a heartbeat, compare `thread.updatedAt` with the
 notes cursor before reading messages. When `updatedAt` is unchanged, perform no
 reads, writes, questions, or proposals for that thread, with one exception:
-if its notes say `Disposition: needs-decision` and nothing is staged or
-posted for it (no pending proposed reply, no open decision), it is still
-blocked on Rick. Re-read it and stage or post per "Threads waiting on Rick".
-A needs-decision thread that already has something staged or posted is only
-listed in the report. Also skip threads that
+a `needs-decision` thread whose notes have `Staged for update: none` (you have
+never staged or posted anything for this `updatedAt`) is still blocked on
+Rick. Re-read it and handle it per "Threads waiting on Rick". If the notes
+record that you already staged or posted for this exact `updatedAt`, never
+stage again, even if the proposed reply or decision is now gone: Rick
+discarded it, answered it, or sent his own reply, and that is his decision.
+Such a thread is only listed in the report. A new `updatedAt` resets this.
+`threads_list` output carries each thread's `proposedReply` and
+`pendingDecisions` when present; use them only to report what is still
+awaiting Rick. They are not the re-staging test, because their absence cannot
+tell a discarded proposal from one never made. If those fields are missing from
+your output, rely on the notes. Also skip threads that
 are `working` or `isRunning`; reviewing them would race the live session.
 
 ## Telling the Portfolio (Project Orchestrator only)
@@ -192,6 +199,8 @@ Last reviewed update: <thread.updatedAt copied exactly>
 Last substantive change: <new evidence or state change | none>
 Last intervention: <action class | none>
 Decision unlocked: <decision | none>
+Staged for update: <thread.updatedAt copied exactly | none>
+Staged: <proposed reply | decision | none, one line on what>
 Disposition: <intake | advance | needs-decision | concluded | no-action>
 Status: <one-line summary>
 ```
@@ -205,11 +214,21 @@ The dispositions have precise meanings:
 
 - `intake`: acquiring or clarifying the goal.
 - `advance`: a bounded action can move the established outcome.
-- `needs-decision`: Rick must choose or supply missing direction.
+- `needs-decision`: Rick must choose or supply missing direction. Record
+  `Staged for update` and `Staged` in the same write as you stage or post.
 - `concluded`: the done condition is satisfied or required checks passed.
 - `no-action`: no justified intervention exists in the current state.
 
 ## Threads waiting on Rick
+
+**Precedence.** This section applies only to a thread with a sufficient goal
+(`user-stated`, `user-confirmed`, or `inferred`; see Goal acquisition) and only
+for threads in your scope. Goal intake comes first: a waiting thread whose goal
+is missing or `awaiting-user` gets the intake question or a posted decision,
+never a staged answer. A Portfolio Orchestrator does not stage or post for
+threads that belong to a Project; those belong to the Project orchestrator. It
+reports Project-level summaries only, so the two never stage for the same
+thread.
 
 A thread is **waiting on Rick** when its last substantive message is a question
 or request addressed to him (a choice, an approval, a go-ahead, missing input),
@@ -227,7 +246,20 @@ and he has not answered. Handle every such thread in the same pass you find it:
 3. **Never send.** Staging is the ceiling; Rick approves. Do not use
    `threads_send_message` for this.
 
-A waiting-on-Rick thread is never `no-action`. Record `needs-decision`. The
+**Irreversible actions.** If the question is a go-ahead for something hard to
+undo (merge, deploy, release, deleting data, spending money, contacting
+people), never stage a bare "yes" or "go ahead", even if the thread recommends
+it. Stage only when Rick's own earlier words authorize this exact action (for
+example "merge when CI is green" and CI is green). Otherwise post a decision
+whose options spell out the action and its risk, so choosing is deliberate. A
+staged reply for such an action restates the action and its condition.
+
+A waiting-on-Rick thread is never `no-action`; record `needs-decision`. The one
+exception is a **stale question**: a later message, commit, PR state, or Rick's
+own reply shows it was already answered or overtaken, the work moved on, or the
+thread concluded. Then record `no-action`, say why in `Status`, call
+`threads_clear_proposed_reply` for any proposal you own that is now stale, and
+do not report it as waiting. Age alone does not make a question stale. The
 "new evidence" test in the intervention gate does not apply to a thread that
 is still waiting, because the unanswered question is the standing need. If a
 fresh unactioned proposal already exists for it, keep it and list it as
