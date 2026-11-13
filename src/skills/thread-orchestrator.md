@@ -22,11 +22,17 @@ Orchestrator must pass `projectId` to `threads_list` and the same Project as
 cross-Project detail. Elevation is per call and does not grant ownership of
 Project manager notes.
 
+You may read authorized threads, maintain owner-scoped manager notes, and stage
+proposed replies. You may never send a proposed reply yourself. Rick must use
+**Approve & Send**. Do not use `threads_send_message` as a workaround; that tool
+is for direct thread-to-thread coordination, not approving your own proposal.
+A pending proposal owned by another orchestrator must be cleared by its owner
+before replacement.
+
 ### Out-of-scope errors
 
-Cross-thread tools (`threads_send_message`, `threads_get_messages`,
-`threads_get_log`, `threads_wait`, `threads_set_proposed_reply`, and so on)
-called as the Portfolio Orchestrator on a Project orchestrator or Project
+Cross-thread read tools (`threads_get_messages`, `threads_get_log`,
+`threads_wait`, and so on) called as the Portfolio Orchestrator on a Project orchestrator or Project
 thread fail with `Target is outside coordination scope.` unless
 `elevatedProjectId` is set. The error text does not name it. On that error:
 
@@ -38,15 +44,10 @@ thread fail with `Target is outside coordination scope.` unless
    orchestrator" or "I can only see myself") without verifying it. A failed
    call is not evidence of its cause; test the likely cause (elevation)
    before reporting a limit, and report what you tried.
-3. Elevation stays per call and explicit. Use it only when Rick's request
-   needs that Project's threads.
-
-You may read authorized threads, maintain owner-scoped manager notes, and stage
-proposed replies. You may never send a proposed reply yourself. Rick must use
-**Approve & Send**. Do not use `threads_send_message` as a workaround; that tool
-is for direct thread-to-thread coordination, not approving your own proposal.
-A pending proposal owned by another orchestrator must be cleared by its owner
-before replacement.
+3. Elevation stays per call and explicit, and it is for reads only. Use it only
+   when Rick's request needs that Project's threads. It does not let the
+   Portfolio Orchestrator stage, post, or write notes for a Project thread;
+   those belong to the Project orchestrator (see "Threads waiting on Rick").
 
 ## Project orchestrators (Portfolio Orchestrator only)
 
@@ -95,8 +96,10 @@ Identify why you woke up before reading other threads:
 For any candidate returned by a heartbeat, compare `thread.updatedAt` with the
 notes cursor before reading messages. When `updatedAt` is unchanged, perform no
 reads, writes, questions, or proposals for that thread, with one exception:
-a `needs-decision` thread whose notes have `Staged for update: none` (you have
-never staged or posted anything for this `updatedAt`) is still blocked on
+a `needs-decision` thread whose notes have `Staged for update: none`, or whose
+legacy notes lack the `Staged for update` field entirely (treat a missing field
+as `none`, so it is re-read once and then recorded), meaning you have never
+staged or posted anything for this `updatedAt`, is still blocked on
 Rick. Re-read it and handle it per "Threads waiting on Rick". If the notes
 record that you already staged or posted for this exact `updatedAt`, never
 stage again, even if the proposed reply or decision is now gone: Rick

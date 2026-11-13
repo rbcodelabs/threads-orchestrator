@@ -39,6 +39,11 @@ describe('thread-orchestrator skill: proactive waiting-on-Rick rules', () => {
     expect(body).toContain('point Rick to Settings → Orchestrators');
   });
 
+  it('treats legacy notes without the Staged field as none and keeps elevation read-only', () => {
+    expect(body).toContain('treat a missing field as `none`');
+    expect(body).toContain('it is for reads only');
+  });
+
   it('still forbids sending', () => {
     expect(body).toContain('**Never send.**');
     expect(body).toContain('You may never send a proposed reply yourself');
