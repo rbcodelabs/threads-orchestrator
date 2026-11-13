@@ -36,7 +36,8 @@ describe('thread-orchestrator skill: proactive waiting-on-Rick rules', () => {
 
   it('points Rick to Settings when orchestrator management is unavailable', () => {
     expect(body).toContain('Orchestrator management is not available in this context');
-    expect(body).toContain('point Rick to Settings → Orchestrators');
+    expect(body).toContain('point Rick to Settings → Threads Orchestrator → Orchestrators');
+    expect(body).not.toContain('Settings → Orchestrators');
   });
 
   it('treats legacy notes without the Staged field as none and keeps elevation read-only', () => {

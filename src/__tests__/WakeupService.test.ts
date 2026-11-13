@@ -2,8 +2,8 @@ import { describe, expect, it, vi } from 'vitest';
 import { WakeupService } from '../WakeupService';
 import type { ClaudeThreadsApiV1, OrchestratorSnapshot, PublicThreadEvent } from '../ClaudeThreadsApiTypes';
 
-const HEADER_1 = 'New activity on 1 thread. Review only the named changed thread; do not run a full reconciliation. The heartbeat handles missed activity.';
-const HEADER_2 = 'New activity on 2 threads. Review only the named changed threads; do not run a full reconciliation. The heartbeat handles missed activity.';
+const HEADER_1 = 'First load the thread-orchestrator skill. New activity on 1 thread. Review only the named changed thread; do not run a full reconciliation. The heartbeat handles missed activity.';
+const HEADER_2 = 'First load the thread-orchestrator skill. New activity on 2 threads. Review only the named changed threads; do not run a full reconciliation. The heartbeat handles missed activity.';
 
 interface ThreadFixture { title?: string; projectId?: string; updatedAt?: number }
 
@@ -75,6 +75,16 @@ describe('WakeupService', () => {
       prompt: [HEADER_1, '- thread-1 "Fix login bug" (done; updatedAt=1700000000000)'].join('\n'),
       queueIfBusy: true,
     });
+  });
+
+  it('starts the event wake-up message with the skill-load instruction exactly once', async () => {
+    const t = setup({ threads: { 'thread-1': { title: 'Fix login bug' } } });
+    t.emit({ kind: 'run.completed', threadId: 'thread-1' });
+    await t.settle();
+    await t.fire();
+    const prompt = t.dispatch.mock.calls[0][1].prompt as string;
+    expect(prompt.startsWith('First load the thread-orchestrator skill. New activity on 1 thread.')).toBe(true);
+    expect(prompt.split('First load the thread-orchestrator skill').length - 1).toBe(1);
   });
 
   it('batches N finishes into one dispatch with plural wording and done/error status', async () => {
@@ -218,7 +228,7 @@ describe('WakeupService', () => {
     await t.fire();
     expect(t.dispatch).toHaveBeenCalledTimes(2);
     expect(t.dispatch).toHaveBeenLastCalledWith({ id: 'portfolio' }, {
-      prompt: 'New activity in Project p1 — the Project orchestrator could not be reached.',
+      prompt: 'First load the thread-orchestrator skill. New activity in Project p1 — the Project orchestrator could not be reached.',
       queueIfBusy: true,
     });
     expect(JSON.stringify(t.dispatch.mock.calls[1])).not.toContain('Sensitive task');
@@ -326,7 +336,7 @@ describe('WakeupService', () => {
     await t.settle();
     await t.fire();
     expect(t.dispatch.mock.calls.map(c => c[0].id)).toEqual(['project:p1', 'portfolio']);
-    expect(t.dispatch.mock.calls[1][1].prompt).toBe('New activity in Project p1 — the Project orchestrator could not be reached.');
+    expect(t.dispatch.mock.calls[1][1].prompt).toBe('First load the thread-orchestrator skill. New activity in Project p1 — the Project orchestrator could not be reached.');
   });
 
   it('the summary-only fallback also skips a Portfolio orchestrator that does not exist', async () => {
