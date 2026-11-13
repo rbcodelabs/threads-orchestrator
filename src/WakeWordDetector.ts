@@ -14,6 +14,7 @@
 
 import * as ort from 'onnxruntime-web';
 import { attachAudioCapture } from './AudioCapture';
+import { MODEL_RELEASE_BASE_URL } from './WakeWordAssets';
 // requestUrl is Obsidian's CORS-safe HTTP client — it operates at the OS /
 // Electron network level and is not subject to the CORS policy that blocks
 // window.fetch() when called from the app://obsidian.md origin.
@@ -273,8 +274,7 @@ export class WakeWordDetector {
     // onnxruntime-web version — must match the version in package.json.
     const ORT_VERSION = '1.26.0';
     const CDN = `https://cdn.jsdelivr.net/npm/onnxruntime-web@${ORT_VERSION}/dist`;
-    // Always pulls from whichever release is tagged "latest" on GitHub.
-    const GH = 'https://github.com/rbcodelabs/obsidian-voice/releases/latest/download';
+    const GH = MODEL_RELEASE_BASE_URL;
 
     // The JS factory is bundled into main.js — no
     // disk copy needed.  Only the binary WASM and the three ONNX models are cached.

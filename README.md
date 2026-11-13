@@ -46,7 +46,7 @@ Releases are available from the public [Threads Orchestrator repository](https:/
 
 In BRAT, add `rbcodelabs/threads-orchestrator`, then enable **Threads Orchestrator** in Community plugins. For manual installation, download `main.js`, `manifest.json`, and `styles.css` from the same release into your vault's plugin directory under `threads-orchestrator`. Threads Orchestrator's plugin, view, and command IDs are distinct from legacy Voice and the previous Obsidian Orchestrator identity.
 
-Wake-word assets download on first use. The inherited ONNX models currently come from the public `rbcodelabs/obsidian-voice` release, and the version-matched WASM runtime comes from jsDelivr. Network access to both is required unless the assets are already cached. The release also includes the ONNX models for manual installation. Audio recognition runs locally after those downloads.
+Wake-word assets download on first use. The ONNX models come from the latest public `rbcodelabs/threads-orchestrator` release, and the version-matched WASM runtime comes from jsDelivr. Network access to both is required unless the assets are already cached. The release also includes the ONNX models for manual installation. Audio recognition runs locally after those downloads.
 
 Do not operate multiple voice controllers at once. If `obsidian-orchestrator` or legacy `obsidian-voice` is loaded, Threads Orchestrator pauses manual and wake-word microphone startup and shows a notice. Disable the previous plugin and reload Threads Orchestrator to resume its voice controls.
 
@@ -130,7 +130,7 @@ Compatibility changes in 0.1.0: `ct_close_thread` remains excluded, and `ct_get_
 
 ## Model
 
-Uses `gpt-realtime-2` via the OpenAI Realtime API (WebRTC).
+Uses `gpt-realtime-2.1` via the OpenAI Realtime API (WebRTC).
 
 ## Debugging
 
