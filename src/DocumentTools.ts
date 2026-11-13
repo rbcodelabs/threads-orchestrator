@@ -147,7 +147,7 @@ export const DOCUMENT_TOOLS = [
 // Receives the view that VoiceView has been tracking via active-leaf-change,
 // which correctly follows tab switches even when the Voice panel has focus.
 function getActiveEditor(view: MarkdownView | null) {
-  return view?.file ? view.editor : null;
+  return view?.file ? (view.editor ?? null) : null;
 }
 
 export async function executeToolCall(

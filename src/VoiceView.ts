@@ -134,7 +134,7 @@ export class VoiceView extends ItemView {
     const view = this.plugin.controller.lastMarkdownView;
     this.contextBanner.empty();
     if (view?.file) {
-      const charCount = view.editor.getValue().length;
+      const charCount = view.editor?.getValue().length ?? 0;
       this.contextBanner.createSpan({ cls: 'voice-context-banner__label', text: 'Context: ' });
       this.contextBanner.createSpan({ cls: 'voice-context-banner__file', text: view.file.name });
       this.contextBanner.createSpan({
