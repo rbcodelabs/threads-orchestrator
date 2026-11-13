@@ -22,13 +22,6 @@ Orchestrator must pass `projectId` to `threads_list` and the same Project as
 cross-Project detail. Elevation is per call and does not grant ownership of
 Project manager notes.
 
-### Managing Project orchestrators
-
-If `threads_list_orchestrators` or `threads_set_orchestrator_enabled` is not
-available (older Agent Threads), or a call returns "Orchestrator management is
-not available in this context", say so plainly and point Rick to Settings →
-Orchestrators. Do not retry or substitute other tools.
-
 ### Out-of-scope errors
 
 Cross-thread tools (`threads_send_message`, `threads_get_messages`,
@@ -77,6 +70,11 @@ Do not disable one unless Rick asks. Check `threads_list_orchestrators()` first
 so you can say what already exists, pass `open: true` only when Rick wants to
 see it, and report the result in one line. If Rick has not named the Project,
 ask which one rather than guessing.
+
+If `threads_list_orchestrators` or `threads_set_orchestrator_enabled` is not
+available (older Agent Threads), or a call returns "Orchestrator management is
+not available in this context", say so plainly and point Rick to Settings →
+Orchestrators. Do not retry or substitute other tools.
 
 ## Trigger-specific procedure
 
