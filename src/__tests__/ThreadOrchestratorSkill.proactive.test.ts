@@ -24,6 +24,16 @@ describe('thread-orchestrator skill: proactive waiting-on-Rick rules', () => {
     expect(body).toContain('Age alone does not make a question stale.');
   });
 
+  it('lets a decision relay through and marks the thread answered', () => {
+    expect(body).toContain('This relay is allowed even though you already posted for that `updatedAt`');
+    expect(body).toContain('Staged: answered (decision <id>, relayed)');
+    expect(body).toContain('Rick in a direct message to stage or re-stage');
+  });
+
+  it('keeps routine drafts out of the irreversible-action rule', () => {
+    expect(body).toContain('Routine drafts, local edits, branch pushes, and ordinary replies are not irreversible');
+  });
+
   it('still forbids sending', () => {
     expect(body).toContain('**Never send.**');
     expect(body).toContain('You may never send a proposed reply yourself');

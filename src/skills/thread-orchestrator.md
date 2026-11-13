@@ -97,6 +97,9 @@ record that you already staged or posted for this exact `updatedAt`, never
 stage again, even if the proposed reply or decision is now gone: Rick
 discarded it, answered it, or sent his own reply, and that is his decision.
 Such a thread is only listed in the report. A new `updatedAt` resets this.
+Two things override this rule: relaying Rick's answer to a posted decision
+with a proposed reply (see the decision paragraph below), and an explicit
+request from Rick in a direct message to stage or re-stage for that thread.
 `threads_list` output carries each thread's `proposedReply` and
 `pendingDecisions` when present; use them only to report what is still
 awaiting Rick. They are not the re-staging test, because their absence cannot
@@ -214,7 +217,8 @@ The dispositions have precise meanings:
 
 - `intake`: acquiring or clarifying the goal.
 - `advance`: a bounded action can move the established outcome.
-- `needs-decision`: Rick must choose or supply missing direction. Record
+- `needs-decision`: Rick must choose or supply missing direction, and has not
+  yet answered (a thread with `Staged: answered` is not waiting). Record
   `Staged for update` and `Staged` in the same write as you stage or post.
 - `concluded`: the done condition is satisfied or required checks passed.
 - `no-action`: no justified intervention exists in the current state.
@@ -246,17 +250,19 @@ and he has not answered. Handle every such thread in the same pass you find it:
 3. **Never send.** Staging is the ceiling; Rick approves. Do not use
    `threads_send_message` for this.
 
-**Irreversible actions.** If the question is a go-ahead for something hard to
-undo (merge, deploy, release, deleting data, spending money, contacting
-people), never stage a bare "yes" or "go ahead", even if the thread recommends
+**Irreversible actions.** If the question is a go-ahead to merge, deploy,
+release, delete data, spend money, or send something outward-facing that cannot
+be recalled (for example an external email or a customer message), never stage a bare "yes" or "go ahead", even if the thread recommends
 it. Stage only when Rick's own earlier words authorize this exact action (for
 example "merge when CI is green" and CI is green). Otherwise post a decision
 whose options spell out the action and its risk, so choosing is deliberate. A
 staged reply for such an action restates the action and its condition.
+Routine drafts, local edits, branch pushes, and ordinary replies are not
+irreversible and follow the normal rules.
 
 A waiting-on-Rick thread is never `no-action`; record `needs-decision`. The one
 exception is a **stale question**: a later message, commit, PR state, or Rick's
-own reply shows it was already answered or overtaken, the work moved on, or the
+own reply shows it was already answered or overtaken, its later state clearly supersedes it, or the
 thread concluded. Then record `no-action`, say why in `Status`, call
 `threads_clear_proposed_reply` for any proposal you own that is now stale, and
 do not report it as waiting. Age alone does not make a question stale. The
@@ -304,7 +310,12 @@ descriptions. It appears inline on that thread's Agent Board card (omit
 arrives in this orchestrator thread as a user message
 (`Decision <header> ... [<decisionId>]: <answer>`); act on it on the next pass.
 It is never delivered to the thread it concerns, so relay it yourself with a
-proposed reply if that thread needs to know. Do not repeat an unanswered
+proposed reply if that thread needs to know. This relay is allowed even though
+you already posted for that `updatedAt`. In the same turn as the relay, update
+the manager notes to `Staged: answered (decision <id>, relayed)` and
+`Disposition: advance`, so the thread stops being listed as waiting on later
+heartbeats. If no relay is needed, still mark `Staged: answered (decision <id>)`
+and set `Disposition: no-action`. Do not repeat an unanswered
 decision; withdraw a moot one with `threads_clear_decision(threadId?, decisionId)`.
 
 ## Terminal and quiet behavior
