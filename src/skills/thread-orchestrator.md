@@ -118,14 +118,30 @@ are `working` or `isRunning`; reviewing them would race the live session.
 ## Telling the Portfolio (Project Orchestrator only)
 
 If you have a `notify_portfolio` tool, it sends the Portfolio orchestrator a
-one-way FYI (no reply comes back). Call it only for: an error you cannot fix, a
-needs-you item older than 15 minutes, a PR ready for review or merged, a release
-shipped, work blocked on something outside your Project, or a thread archived
-or deleted that you did not do. Do not call it for routine completions, a
-heartbeat with nothing new, progress, or title changes. Pass `kind`, a
-`subject` (thread id or PR url), and a summary under 400 characters. Repeats
-and bursts are dropped automatically; the heartbeat covers anything you skip.
-The Portfolio Orchestrator never uses this tool.
+one-way FYI (no reply comes back). Send one in the same pass you notice any of
+these, without waiting for a heartbeat or for the item to age:
+
+- **Waiting on Rick** (`needs_you`): a thread in your Project is waiting on
+  him. Say what is asked and whether a reply is staged or it is a genuine fork.
+- **Decision posted** (`decision`): you posted a `threads_post_decision`.
+- **Finished** (`completed`): a thread concluded or finished its work.
+- **Shipped** (`pr_ready` for a PR ready for review or merged; `release` for a
+  release shipped).
+- **Failed** (`error`): a thread failed or hit an error you cannot fix.
+- **Blocked** (`blocked`) on something outside your Project, or a thread
+  archived or deleted that you did not do (`lost_thread`).
+
+Send only when something changed since you last told the Portfolio. Never send
+for a heartbeat or review where nothing new happened, for progress, or for
+title changes. Do not re-send for a thread you already reported at the same
+state; its next change (answered, finished, failed) is a new update.
+
+Lead with what needs Rick and what is staged, then the fact. Keep it short:
+for example "Needs Rick: deploy-fix asks whether to ship now; reply staged,
+ready to approve." Pass `kind`, a `subject` (thread id, decision id or PR
+url), and a summary under 400 characters. Use plain thread titles and ids here,
+not `[[thread:...]]` markers. Repeats and bursts are dropped automatically; the
+heartbeat covers anything you skip. The Portfolio Orchestrator never uses this tool.
 
 ## Nested goal contracts
 
