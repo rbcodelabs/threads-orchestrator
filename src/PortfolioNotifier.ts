@@ -22,7 +22,7 @@
 import type { AgentToolContribution, AgentToolResult, ClaudeThreadsApiV1, OrchestratorSnapshot } from './ClaudeThreadsApiTypes';
 
 export const NOTIFY_PORTFOLIO_TOOL_NAME = 'notify_portfolio';
-export const NOTIFY_KINDS = ['error', 'needs_you', 'pr_ready', 'release', 'blocked', 'lost_thread'] as const;
+export const NOTIFY_KINDS = ['error', 'needs_you', 'decision', 'completed', 'pr_ready', 'release', 'blocked', 'lost_thread'] as const;
 export type NotifyKind = typeof NOTIFY_KINDS[number];
 
 const MAX_SUMMARY_CHARS = 400;
@@ -39,16 +39,16 @@ export interface PortfolioNotifierOptions {
 
 const DESCRIPTION = [
   'Send the Portfolio orchestrator a one-way FYI about something in your Project that Rick or the portfolio should know.',
-  'Use it only for: an error you cannot fix, a needs-you item older than 15 minutes, a PR ready for review or merged, a release shipped,',
-  'work blocked on something outside the Project, or a thread archived or deleted that you did not do.',
-  'Do not use it for routine completions, heartbeats with nothing new, progress notes or title changes.',
+  'Send it as soon as you notice: a thread waiting on Rick, a decision posted, a thread finished, a PR ready for review or merged, a release shipped,',
+  'a thread failed or hit an error you cannot fix, work blocked on something outside the Project, or a thread archived or deleted that you did not do.',
+  'Lead the summary with what needs Rick and what is staged. Do not use it when nothing changed, for progress notes or title changes.',
   'No reply comes back. Repeats of the same kind and subject are dropped, and each Project is rate limited.',
 ].join(' ');
 
 const INPUT_SCHEMA = {
   type: 'object',
   properties: {
-    kind: { type: 'string', enum: [...NOTIFY_KINDS], description: 'What happened: error, needs_you, pr_ready, release, blocked, or lost_thread.' },
+    kind: { type: 'string', enum: [...NOTIFY_KINDS], description: 'What happened: error, needs_you, decision, completed, pr_ready, release, blocked, or lost_thread.' },
     subject: { type: 'string', description: 'Thread id, PR url or a short key naming what this is about. Used to de-duplicate.' },
     summary: { type: 'string', description: `One or two sentences, at most ${MAX_SUMMARY_CHARS} characters (longer is truncated).` },
     threadId: { type: 'string', description: 'Optional: the related thread id.' },

@@ -54,7 +54,7 @@ describe('PortfolioNotifier registration', () => {
     const schema = c.inputSchema as { type: string; required: string[]; properties: Record<string, { enum?: string[] }> };
     expect(schema.type).toBe('object');
     expect(schema.required).toEqual(['kind', 'subject', 'summary']);
-    expect(schema.properties.kind.enum).toEqual(['error', 'needs_you', 'pr_ready', 'release', 'blocked', 'lost_thread']);
+    expect(schema.properties.kind.enum).toEqual(['error', 'needs_you', 'decision', 'completed', 'pr_ready', 'release', 'blocked', 'lost_thread']);
     expect(Object.keys(schema.properties)).toEqual(['kind', 'subject', 'summary', 'threadId', 'url']);
     t.notifier.stop();
     expect(t.disposeTool).toHaveBeenCalledTimes(1);
@@ -337,8 +337,8 @@ describe('project orchestrator skill', () => {
     expect(THREAD_ORCHESTRATOR_SKILL.name).toBe('thread-orchestrator');
     const body = THREAD_ORCHESTRATOR_SKILL.content;
     expect(body).toContain('notify_portfolio');
-    for (const trigger of ['an error you cannot fix', 'older than 15 minutes', 'ready for review or merged', 'release', 'outside your Project', 'that you did not do']) expect(body).toContain(trigger);
-    for (const never of ['routine completions', 'heartbeat with nothing new', 'progress', 'title changes']) expect(body).toContain(never);
+    for (const trigger of ['waiting on Rick', 'Decision posted', 'Finished', 'ready for review or merged', 'release', 'Failed', 'outside your Project', 'that you did not do', 'Lead with what needs Rick']) expect(body).toContain(trigger);
+    for (const never of ['nothing new happened', 'progress', 'title changes']) expect(body).toContain(never);
     expect(body).toContain('one-way');
     expect(body).toContain('The Portfolio Orchestrator never uses this tool');
     expect(body.replace(/\s+/g, ' ')).toContain('Portfolio Orchestrator must pass `projectId`');
