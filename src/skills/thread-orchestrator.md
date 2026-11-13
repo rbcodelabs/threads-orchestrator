@@ -24,6 +24,29 @@ is for direct thread-to-thread coordination, not approving your own proposal.
 A pending proposal owned by another orchestrator must be cleared by its owner
 before replacement.
 
+## Project orchestrators (Portfolio Orchestrator only)
+
+Two tools manage Project orchestrators, and only the Portfolio Orchestrator may
+call them; a Project orchestrator or any other thread is refused.
+
+- `threads_list_orchestrators()` is read-only: it returns the Portfolio and every
+  Project orchestrator as `{ id, kind, title, enabled, threadId, projectId }`. A
+  disabled or never-created Project orchestrator has an empty `threadId`.
+- `threads_set_orchestrator_enabled({ projectId, enabled?, open? })` enables
+  (creating the thread if needed; calling it again is harmless) or disables a
+  Project's orchestrator. `open: true` also opens its thread for Rick when
+  enabling. The Portfolio itself cannot be disabled.
+
+Use `threads_set_orchestrator_enabled` only when Rick explicitly asks for it
+(for example "turn on the orchestrator for HipTrip", "open the Compass
+orchestrator") or when a goal Rick has stated plainly cannot be met without a
+Project orchestrator. Never enable one speculatively, to tidy up, or because a
+Project looks busy; each one runs its own agent and costs attention and money.
+Do not disable one unless Rick asks. Check `threads_list_orchestrators()` first
+so you can say what already exists, pass `open: true` only when Rick wants to
+see it, and report the result in one line. If Rick has not named the Project,
+ask which one rather than guessing.
+
 ## Trigger-specific procedure
 
 Identify why you woke up before reading other threads:
