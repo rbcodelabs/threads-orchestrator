@@ -99,4 +99,62 @@ describe('thread-orchestrator skill: proactive waiting-on-Rick rules', () => {
     expect(body).toContain('**Never send.**');
     expect(body).toContain('You may never send a proposed reply yourself');
   });
+
+  it('includes Strategy between Thread outcome and Done when in Manager notes v2', () => {
+    const raw = THREAD_ORCHESTRATOR_SKILL.content;
+    const v2Start = raw.indexOf('## Manager notes v2');
+    expect(v2Start).toBeGreaterThanOrEqual(0);
+    const v2Next = raw.slice(v2Start + 1).search(/\n## /);
+    const v2Section = v2Next === -1 ? raw.slice(v2Start) : raw.slice(v2Start, v2Start + 1 + v2Next);
+
+    const outcomeIdx = v2Section.indexOf('Thread outcome: <specific result>');
+    const strategyIdx = v2Section.indexOf('Strategy: <current approach, key phases/gates, or tactical plan | missing>');
+    const doneWhenIdx = v2Section.indexOf('Done when: <observable completion condition>');
+
+    expect(outcomeIdx).toBeGreaterThanOrEqual(0);
+    expect(strategyIdx).toBeGreaterThan(outcomeIdx);
+    expect(doneWhenIdx).toBeGreaterThan(strategyIdx);
+    expect(v2Section.replace(/\s+/g, ' ')).toContain('passing `elevatedProjectId` set to that Project\'s ID to `threads_set_notes`');
+  });
+
+  it('extracts strategy during goal acquisition and refreshes Strategy when the tactical approach shifts', () => {
+    const raw = THREAD_ORCHESTRATOR_SKILL.content;
+    const nestedStart = raw.indexOf('## Nested goal contracts');
+    const goalStart = raw.indexOf('## Goal acquisition');
+    const v2Start = raw.indexOf('## Manager notes v2');
+    expect(nestedStart).toBeGreaterThanOrEqual(0);
+    expect(goalStart).toBeGreaterThan(nestedStart);
+    expect(v2Start).toBeGreaterThan(goalStart);
+
+    const nestedSection = raw.slice(nestedStart, goalStart).replace(/\s+/g, ' ');
+    const goalSection = raw.slice(goalStart, v2Start).replace(/\s+/g, ' ');
+
+    expect(nestedSection).toContain('manager notes define the concrete result this workstream contributes, its strategy, its done condition, and its constraints');
+    expect(goalSection).toContain('Extract the desired outcome, strategy (current tactical approach, key phases/gates, or execution plan; `missing` if not yet established)');
+    expect(goalSection).toContain('without requiring a redundant goal interview when the outcome and done condition are clear');
+    expect(goalSection).toContain('updated whenever the thread\'s tactical approach materially changes');
+    expect(body).toContain('Refresh `Strategy` whenever the thread\'s tactical approach, key phases/gates, or execution plan materially shifts');
+  });
+
+  it('permits Portfolio threads_set_notes with elevatedProjectId when a Project orchestrator is disabled, while blocking overwrites when enabled', () => {
+    const raw = THREAD_ORCHESTRATOR_SKILL.content;
+    const scopeStart = raw.indexOf('## Scope and authority');
+    const errorsStart = raw.indexOf('### Out-of-scope errors');
+    const nextHeading = raw.indexOf('## Project orchestrators');
+    expect(scopeStart).toBeGreaterThanOrEqual(0);
+    expect(errorsStart).toBeGreaterThan(scopeStart);
+    expect(nextHeading).toBeGreaterThan(errorsStart);
+
+    const scopeSection = raw.slice(scopeStart, errorsStart).replace(/\s+/g, ' ');
+    const errorsSection = raw.slice(errorsStart, nextHeading).replace(/\s+/g, ' ');
+
+    expect(scopeSection).toContain('while a Project\'s orchestrator is enabled, Project manager notes belong to that Project orchestrator and Portfolio elevation cannot overwrite them');
+    expect(scopeSection).toContain('When a Project\'s orchestrator is **disabled** (`enabled: false` in `threads_list_orchestrators()`), the Portfolio Orchestrator may write `threads_set_notes` for threads in that Project by passing `elevatedProjectId` set to the Project\'s ID');
+    expect(scopeSection).toContain('once the Project orchestrator is enabled, it resumes sole ownership of that Project\'s manager notes');
+    expect(scopeSection).toContain('Staging replies and posting decisions for Project threads remain with the Project orchestrator unless Rick explicitly asks otherwise');
+
+    expect(errorsSection).toContain('While a Project\'s orchestrator is enabled, it is for reads only');
+    expect(errorsSection).toContain('do not overwrite that Project orchestrator\'s manager notes');
+    expect(errorsSection).toContain('When a Project\'s orchestrator is **disabled** (`enabled: false` in `threads_list_orchestrators()`), the Portfolio Orchestrator may also pass `elevatedProjectId` set to the Project\'s ID on `threads_set_notes`');
+  });
 });
