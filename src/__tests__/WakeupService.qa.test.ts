@@ -103,7 +103,7 @@ describe('WakeupService QA: debounce and batching', () => {
     const t = setup({ threads: { a: {}, b: {}, c: {} } });
     for (const id of ['a', 'b', 'c']) t.emit('run.completed', id);
     await t.settle(); await t.fire();
-    expect(t.dispatch.mock.calls[0][1].prompt.split('\n')[0]).toBe('First load the thread-orchestrator skill. New activity on 3 threads. Review only the named changed threads; do not run a full reconciliation. The heartbeat handles missed activity.');
+    expect(t.dispatch.mock.calls[0][1].prompt.split('\n')[0]).toBe('First load the thread-orchestrator skill. New activity on 3 threads. Review only the named changed threads; use threads_get when available rather than a full reconciliation. The heartbeat handles missed activity.');
     expect(t.dispatch.mock.calls[0][1].queueIfBusy).toBe(true);
   });
 
@@ -112,7 +112,7 @@ describe('WakeupService QA: debounce and batching', () => {
     t.emit('run.completed', 'a'); await t.settle();
     t.get.mockRejectedValue(new Error('gone'));
     await t.fire();
-    expect(t.dispatch.mock.calls[0][1].prompt).toBe('First load the thread-orchestrator skill. New activity on 1 thread. Review only the named changed thread; do not run a full reconciliation. The heartbeat handles missed activity.\n- a (done; updatedAt=unavailable)');
+    expect(t.dispatch.mock.calls[0][1].prompt).toBe('First load the thread-orchestrator skill. New activity on 1 thread. Review only the named changed thread; use threads_get when available rather than a full reconciliation. The heartbeat handles missed activity.\n- a (done; updatedAt=unavailable)');
   });
 
   it('an event during an in-flight flush starts a new batch that is delivered separately', async () => {

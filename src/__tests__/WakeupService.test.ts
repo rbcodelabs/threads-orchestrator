@@ -2,8 +2,8 @@ import { describe, expect, it, vi } from 'vitest';
 import { WakeupService } from '../WakeupService';
 import type { ClaudeThreadsApiV1, OrchestratorSnapshot, PublicThreadEvent } from '../ClaudeThreadsApiTypes';
 
-const HEADER_1 = 'First load the thread-orchestrator skill. New activity on 1 thread. Review only the named changed thread; do not run a full reconciliation. The heartbeat handles missed activity.';
-const HEADER_2 = 'First load the thread-orchestrator skill. New activity on 2 threads. Review only the named changed threads; do not run a full reconciliation. The heartbeat handles missed activity.';
+const HEADER_1 = 'First load the thread-orchestrator skill. New activity on 1 thread. Review only the named changed thread; use threads_get when available rather than a full reconciliation. The heartbeat handles missed activity.';
+const HEADER_2 = 'First load the thread-orchestrator skill. New activity on 2 threads. Review only the named changed threads; use threads_get when available rather than a full reconciliation. The heartbeat handles missed activity.';
 
 interface ThreadFixture { title?: string; projectId?: string; updatedAt?: number }
 

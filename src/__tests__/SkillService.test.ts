@@ -14,7 +14,7 @@ function setup() {
 describe('bundled thread-orchestrator skill', () => {
   it('has the same name and description core shipped, and a body without frontmatter', () => {
     expect(THREAD_ORCHESTRATOR_SKILL.name).toBe('thread-orchestrator');
-    expect(THREAD_ORCHESTRATOR_SKILL.description).toMatch(/^Scoped orchestrator for Agent Threads\./);
+    expect(THREAD_ORCHESTRATOR_SKILL.description).toMatch(/^Load first when this thread is the Portfolio or a Project orchestrator/);
     expect(THREAD_ORCHESTRATOR_SKILL.description.length).toBeLessThanOrEqual(1024);
     expect(THREAD_ORCHESTRATOR_SKILL.name).toMatch(/^[a-z0-9][a-z0-9-]{0,63}$/);
     expect(THREAD_ORCHESTRATOR_SKILL.content.startsWith('# Thread Orchestrator')).toBe(true);
