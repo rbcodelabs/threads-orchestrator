@@ -72,9 +72,11 @@ describe('Option B: Goal-Bounded Campaign Manager skill v3', () => {
     expect(body).toMatch(/remaining unreviewed count/);
   });
 
-  it('defines Tier 2 Cross-Thread Vault Ledger paths and triggers', () => {
+  it('defines Tier 2 Cross-Thread Vault Ledger paths, MCP ledger tools, and triggers', () => {
     expect(body).toContain('`Products/<Project>/orchestrator-ledger.md`');
     expect(body).toContain('`Products/Portfolio/orchestrator-ledger.md`');
+    expect(body).toContain('`threads_get_ledger`');
+    expect(body).toContain('`threads_set_ledger`');
     expect(body).toMatch(/3\+ related threads/);
     expect(body).toMatch(/multi-PR batches\/waves/);
     expect(body).toMatch(/merge ordering/);
