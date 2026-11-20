@@ -288,7 +288,7 @@ export class WakeupService {
     }));
     const noun = entries.length === 1 ? 'thread' : 'threads';
     return [
-      `${LOAD_SKILL_INSTRUCTION} New activity on ${entries.length} ${noun}. Review only the named changed ${noun}; do not run a full reconciliation. The heartbeat handles missed activity.`,
+      `${LOAD_SKILL_INSTRUCTION} New activity on ${entries.length} ${noun}. Review only the named changed ${noun}; use threads_get when available rather than a full reconciliation. The heartbeat handles missed activity.`,
       ...lines,
     ].join('\n');
   }
