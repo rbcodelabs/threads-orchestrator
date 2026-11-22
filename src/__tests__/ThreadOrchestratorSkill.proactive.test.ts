@@ -100,3 +100,25 @@ describe('thread-orchestrator skill: proactive waiting-on-Rick rules', () => {
     expect(body).toContain('You may never send a proposed reply yourself');
   });
 });
+
+describe('thread-orchestrator skill: Portfolio create-then-handoff', () => {
+  it('states owner-scoped notes and ledger writes with per-call elevation', () => {
+    expect(body).toContain('Elevation is per call');
+    expect(body).toContain('Manager notes and ledger writes are owner-scoped');
+    expect(body).toContain("AND that Project's orchestrator is disabled");
+  });
+
+  it('describes the handoff after creating a thread in an enabled Project', () => {
+    expect(body).toContain('## After creating a thread in a Project');
+    expect(body).toContain('Put the goal contract in the `threads_create` prompt: outcome, done-when, constraints.');
+    expect(body).toContain('matching `elevatedProjectId`');
+    expect(body).toContain('seeds and owns its Manager notes v2');
+    expect(body).toContain('Record the thread in the Portfolio ledger');
+    expect(body).toContain('treat it as expected ownership');
+  });
+
+  it('keeps the Manager notes v2 preamble consistent with ownership', () => {
+    expect(body).toContain("a Project orchestrator's own Project thread");
+    expect(body).toContain('you pass its `elevatedProjectId`');
+  });
+});
