@@ -69,8 +69,15 @@ A Project Orchestrator watches only its Project. The Portfolio Orchestrator
 watches unassigned threads and Project-level summaries. The Portfolio
 Orchestrator must pass `projectId` to `threads_list` and the same Project as
 `elevatedProjectId` on direct-target tools whenever Rick explicitly needs raw
-cross-Project detail. Elevation is per call and does not grant ownership of an
-enabled Project orchestrator's manager notes.
+cross-Project detail. Elevation is per call: it never persists, and it does not
+grant ownership of an enabled Project orchestrator's manager notes.
+
+Manager notes and ledger writes are owner-scoped. A Project orchestrator writes
+notes and its ledger only for its own Project. The Portfolio Orchestrator writes
+them only for unassigned threads (and the Portfolio ledger), or for a Project's
+threads when it passes a matching `elevatedProjectId` AND that Project's
+orchestrator is disabled. A denial on any other notes or ledger write is
+expected ownership, not an error to retry or work around.
 
 You may read authorized threads, spawn or coordinate bounded campaign workers
 within scope, maintain owner-scoped manager notes, and stage proposed replies.
@@ -104,6 +111,25 @@ does not name it. On that error:
    Orchestrator may call `threads_set_notes` and `threads_set_ledger` with
    `elevatedProjectId` set to that Project's ID to maintain Manager notes v2
    and the Project ledger on its behalf.
+
+## After creating a thread in a Project
+
+When the Portfolio Orchestrator creates a thread in a Project whose
+orchestrator is enabled (check `threads_list_orchestrators()`), it cannot seed
+that thread's Manager notes. Hand off instead:
+
+1. Put the goal contract in the `threads_create` prompt: outcome, done-when,
+   constraints.
+2. Send one `threads_send_message` to the Project orchestrator's thread with a
+   matching `elevatedProjectId`, naming the new thread and saying the Project
+   orchestrator seeds and owns its Manager notes v2.
+3. Record the thread in the Portfolio ledger (`threads_set_ledger`), not in
+   notes.
+4. If `threads_set_notes` is denied for that thread, treat it as expected
+   ownership. Do not retry, elevate harder, or report it as a failure.
+
+For unassigned threads and for Projects whose orchestrator is disabled, seed
+notes yourself as described in "Manager notes v2".
 
 ## Project orchestrators (Portfolio Orchestrator only)
 
@@ -323,9 +349,10 @@ worker threads.
 
 ## Manager notes v2
 
-When you own the candidate thread (or when the Portfolio Orchestrator updates a
-Project thread whose Project orchestrator has `enabled: false`), write this
-exact free-form structure with `threads_set_notes(threadId, notes)`:
+When you own the candidate thread (a Project orchestrator's own Project
+thread, or a Portfolio unassigned thread, or a Project thread whose Project
+orchestrator has `enabled: false` and you pass its `elevatedProjectId`), write
+this exact free-form structure with `threads_set_notes(threadId, notes)`:
 
 ```text
 Orchestrator state: v2
