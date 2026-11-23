@@ -249,7 +249,9 @@ Keep per-thread state and cross-thread campaign state cleanly separated:
 ## Telling the Portfolio (Project Orchestrator only)
 
 If you have a `notify_portfolio` tool, it sends the Portfolio orchestrator a
-one-way FYI (no reply comes back). Send one in the same pass you notice any of
+one-way FYI (no reply comes back). Decision and needs-you pings now carry a
+read-only block of the thread's pending decision options, so you do not need to
+restate them. Send one in the same pass you notice any of
 these, without waiting for a heartbeat or for the item to age:
 
 - **Waiting on Rick** (`needs_you`): a thread in your Project is waiting on
