@@ -3,7 +3,15 @@ export type ThreadStatus = 'waiting' | 'active' | 'error' | 'archived' | 'reconn
 export interface PublicError { readonly code: PublicErrorCode; readonly message: string }
 export interface MessageSnapshot { readonly id: string; readonly role: 'user' | 'assistant' | 'compact' | 'notice'; readonly content: string; readonly timestamp: number }
 export interface ThreadSummary { readonly id: string; readonly title: string; readonly status: ThreadStatus; readonly reviewed: boolean; readonly cwd?: string; readonly projectId?: string; readonly agentHarness: 'claude' | 'codex'; readonly createdAt: number; readonly updatedAt: number; readonly isRunning: boolean; readonly messageCount: number }
-export interface ThreadSnapshot extends ThreadSummary { readonly messages: readonly MessageSnapshot[] }
+/** Mirrors core's PublicPendingDecision (agent-threads #960): a read-only copy of a decision posted for Rick. */
+export interface PublicPendingDecision {
+  readonly id: string; readonly header: string; readonly question: string;
+  readonly options: readonly { readonly label: string; readonly description: string }[];
+  readonly multiSelect: boolean; readonly allowOther: boolean;
+  readonly recommended?: string; readonly sourceThreadId?: string; readonly createdAt: number;
+}
+/** `pendingDecisions` is present only when at least one is pending, and only on a core with capability 'threads.pendingDecisions'. */
+export interface ThreadSnapshot extends ThreadSummary { readonly messages: readonly MessageSnapshot[]; readonly pendingDecisions?: readonly PublicPendingDecision[] }
 export interface ThreadQuery { readonly projectId?: string | null; readonly status?: ThreadStatus; readonly limit?: number }
 export interface CreateThreadInput { readonly title?: string; readonly cwd?: string; readonly projectId?: string; readonly agentHarness?: 'claude' | 'codex' }
 export interface SendInput { readonly prompt: string }
